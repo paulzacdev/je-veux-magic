@@ -16,17 +16,26 @@ interface WeeklyContent {
 export function useWeeklyContent(language: Language) {
   const [content, setContent] = useState<WeeklyContent | null>(null);
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetch = async () => {
+    let cancelled = false;
+
+    const fetchContent = async () => {
       setLoading(true);
+      setError(null);
       const weekStart = getCurrentWeekStart();
+
+      // Try to fetch existing content
       const { data } = await supabase
         .from('weekly_content')
         .select('*')
         .eq('week_start', weekStart)
         .eq('language', language)
-        .single();
+        .maybeSingle();
+
+      if (cancelled) return;
 
       if (data) {
         setContent({
@@ -34,23 +43,42 @@ export function useWeeklyContent(language: Language) {
           virtues: data.virtues as string[] | null,
           christian_advice: data.christian_advice as string[] | null,
         });
-      } else {
-        // Generate content via edge function
-        try {
-          const { data: genData } = await supabase.functions.invoke('generate-content', {
-            body: { language, weekStart },
+        setLoading(false);
+        return;
+      }
+
+      // Generate content via edge function
+      setGenerating(true);
+      try {
+        const { data: genData, error: genError } = await supabase.functions.invoke('generate-content', {
+          body: { language, weekStart },
+        });
+
+        if (cancelled) return;
+
+        if (genError) throw genError;
+
+        if (genData?.content) {
+          setContent({
+            ...genData.content,
+            virtues: genData.content.virtues as string[] | null,
+            christian_advice: genData.content.christian_advice as string[] | null,
           });
-          if (genData?.content) {
-            setContent(genData.content);
-          }
-        } catch (e) {
-          console.error('Failed to generate content:', e);
+        }
+      } catch (e: any) {
+        console.error('Failed to generate content:', e);
+        if (!cancelled) setError(e.message || 'Erreur de génération');
+      } finally {
+        if (!cancelled) {
+          setGenerating(false);
+          setLoading(false);
         }
       }
-      setLoading(false);
     };
-    fetch();
+
+    fetchContent();
+    return () => { cancelled = true; };
   }, [language]);
 
-  return { content, loading };
+  return { content, loading, generating, error };
 }
