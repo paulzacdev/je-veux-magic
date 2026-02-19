@@ -3,7 +3,7 @@ export type Language = 'fr' | 'ar' | 'en';
 const translations: Record<Language, Record<string, string>> = {
   fr: {
     app_title: "Évangile Vécu",
-    app_subtitle: "Diocèse Pierre Claverie",
+    app_subtitle: "Diocèse Oran",
     login: "Connexion",
     signup: "Inscription",
     email: "Adresse e-mail",
@@ -44,10 +44,12 @@ const translations: Record<Language, Record<string, string>> = {
     language: "Langue",
     today: "Aujourd'hui",
     week_of: "Semaine du",
+    or_continue_with: "ou continuer avec",
+    sign_in_google: "Continuer avec Google",
   },
   ar: {
     app_title: "الإنجيل المعاش",
-    app_subtitle: "أبرشية بيار كلافيري",
+    app_subtitle: "أبرشية وهران",
     login: "تسجيل الدخول",
     signup: "إنشاء حساب",
     email: "البريد الإلكتروني",
@@ -88,10 +90,12 @@ const translations: Record<Language, Record<string, string>> = {
     language: "اللغة",
     today: "اليوم",
     week_of: "أسبوع",
+    or_continue_with: "أو المتابعة مع",
+    sign_in_google: "المتابعة مع Google",
   },
   en: {
     app_title: "Living Gospel",
-    app_subtitle: "Diocese Pierre Claverie",
+    app_subtitle: "Diocese of Oran",
     login: "Login",
     signup: "Sign Up",
     email: "Email address",
@@ -132,6 +136,8 @@ const translations: Record<Language, Record<string, string>> = {
     language: "Language",
     today: "Today",
     week_of: "Week of",
+    or_continue_with: "or continue with",
+    sign_in_google: "Continue with Google",
   },
 };
 
