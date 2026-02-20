@@ -81,10 +81,30 @@ export default function Auth() {
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     try {
-      const { error } = await lovable.auth.signInWithOAuth('google', {
-        redirect_uri: window.location.origin,
-      });
-      if (error) throw error;
+      const isCustomDomain =
+        !window.location.hostname.includes('lovable.app') &&
+        !window.location.hostname.includes('lovableproject.com');
+
+      if (isCustomDomain) {
+        // On custom domains (Netlify), bypass the Lovable auth-bridge
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: `${window.location.origin}/dashboard`,
+            skipBrowserRedirect: true,
+          },
+        });
+        if (error) throw error;
+        if (data?.url) {
+          window.location.href = data.url;
+        }
+      } else {
+        // On Lovable domains, use the managed flow
+        const { error } = await lovable.auth.signInWithOAuth('google', {
+          redirect_uri: window.location.origin,
+        });
+        if (error) throw error;
+      }
     } catch (err: any) {
       toast.error(err.message ?? 'Erreur lors de la connexion avec Google.');
       setGoogleLoading(false);
