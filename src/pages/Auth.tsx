@@ -42,10 +42,11 @@ export default function Auth() {
           },
         });
         if (error) throw error;
-        toast.success('✓ Vérifiez votre e-mail pour confirmer votre inscription.');
+        toast.success('✓ Inscription réussie ! Connexion en cours...');
       }
     } catch (err: any) {
-      toast.error(err.message);
+      console.error('Auth error:', err);
+      toast.error(err.message || 'Une erreur est survenue.');
     } finally {
       setLoading(false);
     }
