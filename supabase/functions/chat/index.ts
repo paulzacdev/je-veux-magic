@@ -11,9 +11,8 @@ serve(async (req) => {
   try {
     const { messages, language } = await req.json();
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+    if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
     const langNames: Record<string, string> = {
       fr: "français",
       ar: "arabe",
@@ -43,14 +42,14 @@ redirige doucement vers la dimension spirituelle ou suggère de consulter un pr�
 Tu peux citer l'Écriture, les Pères de l'Église, ou les Saints pour enrichir tes réponses.
 Garde un ton chaleureux, humble et profond. Tu es un ami spirituel, pas un professeur distant.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "meta-llama/llama-3.3-70b-instruct:free",
         messages: [
           { role: "system", content: systemPrompt },
           ...messages,
