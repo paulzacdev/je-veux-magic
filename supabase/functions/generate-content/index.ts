@@ -68,7 +68,7 @@ Utilise l'outil generate_spiritual_content pour fournir toutes les informations.
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "meta-llama/llama-3.3-70b-instruct:free",
+        model: "openai/gpt-oss-120b:free",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -183,7 +183,7 @@ Utilise l'outil generate_spiritual_content pour fournir toutes les informations.
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "meta-llama/llama-3.3-70b-instruct:free",
+        model: "openai/gpt-oss-120b:free",
         messages: [
           { role: "system", content: systemPrompt },
           {
