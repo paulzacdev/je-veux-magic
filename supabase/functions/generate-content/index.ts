@@ -14,15 +14,30 @@ async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3)
     if (response.status === 429 && attempt < maxRetries) {
       const delay = delays[attempt] || 15000;
       console.log(`Rate limited (429). Retry ${attempt + 1}/${maxRetries} after ${delay / 1000}s...`);
-      await response.text(); // consume body
+      await response.text();
       await new Promise(r => setTimeout(r, delay));
       continue;
     }
     return response;
   }
-  // Should never reach here, but just in case
   return await fetch(url, options);
 }
+
+// Hardcoded correct Gospel readings from the Catholic Roman Lectionary
+// Key: Sunday date (YYYY-MM-DD), Value: { reference, celebration }
+const GOSPEL_READINGS: Record<string, { reference: string; celebration: string }> = {
+  // MARCH 2026 - Lent Year A
+  "2026-03-01": { reference: "Matthieu 17, 1-9", celebration: "2e Dimanche de Carême, Année A" },
+  "2026-03-08": { reference: "Jean 4, 5-42", celebration: "3e Dimanche de Carême, Année A" },
+  "2026-03-15": { reference: "Jean 9, 1-41", celebration: "4e Dimanche de Carême, Année A" },
+  "2026-03-22": { reference: "Jean 11, 1-45", celebration: "5e Dimanche de Carême, Année A" },
+  "2026-03-29": { reference: "Matthieu 26, 14 — 27, 66", celebration: "Dimanche des Rameaux et de la Passion, Année A" },
+  // APRIL 2026 - Easter Year A
+  "2026-04-05": { reference: "Jean 20, 1-9", celebration: "Dimanche de Pâques" },
+  "2026-04-12": { reference: "Jean 20, 19-31", celebration: "2e Dimanche de Pâques (Dimanche de la Divine Miséricorde), Année A" },
+  "2026-04-19": { reference: "Luc 24, 13-35", celebration: "3e Dimanche de Pâques, Année A" },
+  "2026-04-26": { reference: "Jean 10, 1-10", celebration: "4e Dimanche de Pâques, Année A" },
+};
 
 function getLiturgicalYear(weekStart: string): 'A' | 'B' | 'C' {
   const year = new Date(weekStart).getFullYear();
@@ -57,6 +72,9 @@ serve(async (req) => {
 
     const { sundayDate, liturgicalYear } = getWeekInfo(weekStart);
 
+    // Look up the correct Gospel reading from the hardcoded table
+    const knownReading = GOSPEL_READINGS[sundayDate];
+
     const langNames: Record<string, string> = {
       fr: "français",
       ar: "arabe",
@@ -71,12 +89,26 @@ Tu rédiges des contenus spirituels catholiques pour l'application "Évangile V�
 Tes réponses sont toujours théologiquement fiables, pastorales, accessibles aux fidèles, et profondément enracinées dans la Tradition catholique.
 Tu réponds UNIQUEMENT en ${langName}.`;
 
-    const userPrompt = `Génère le contenu spirituel complet pour la semaine liturgique commençant le vendredi ${weekStart}.
+    // Build the user prompt differently depending on whether we have the correct reference
+    let userPrompt: string;
+    if (knownReading) {
+      userPrompt = `Génère le contenu spirituel complet pour la semaine liturgique commençant le vendredi ${weekStart}.
+Le dimanche de cette semaine est le ${sundayDate} — ${knownReading.celebration}.
+
+L'Évangile de ce dimanche est : **${knownReading.reference}**.
+C'est une donnée certaine du lectionnaire catholique romain officiel. Tu dois utiliser EXACTEMENT cette référence.
+
+Reproduis le texte intégral de cet Évangile (${knownReading.reference}) et génère le contenu spirituel correspondant.
+
+Utilise l'outil generate_spiritual_content pour fournir toutes les informations.`;
+    } else {
+      userPrompt = `Génère le contenu spirituel complet pour la semaine liturgique commençant le vendredi ${weekStart}.
 Le dimanche de cette semaine est le ${sundayDate} (Année liturgique ${liturgicalYear}).
 
 Identifie précisément l'Évangile du dimanche ${sundayDate} selon le lectionnaire catholique romain officiel (année ${liturgicalYear}).
 
 Utilise l'outil generate_spiritual_content pour fournir toutes les informations.`;
+    }
 
     const openRouterUrl = "https://openrouter.ai/api/v1/chat/completions";
     const openRouterHeaders = {
@@ -84,7 +116,6 @@ Utilise l'outil generate_spiritual_content pour fournir toutes les informations.
       "Content-Type": "application/json",
     };
 
-    // Use fetchWithRetry for the main content generation
     const response = await fetchWithRetry(openRouterUrl, {
       method: "POST",
       headers: openRouterHeaders,
@@ -167,6 +198,11 @@ Utilise l'outil generate_spiritual_content pour fournir toutes les informations.
     } catch (e) {
       console.error("JSON parse error:", e, "Args:", toolCall.function.arguments?.slice(0, 500));
       throw new Error("Failed to parse tool call arguments");
+    }
+
+    // If we have a known reference, force it in the saved data to prevent AI hallucination
+    if (knownReading) {
+      parsed.gospel_reference = knownReading.reference;
     }
 
     // Save to database
