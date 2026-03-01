@@ -6,6 +6,24 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Retry wrapper with exponential backoff for rate limits
+async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
+  const delays = [5000, 10000, 15000];
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const response = await fetch(url, options);
+    if (response.status === 429 && attempt < maxRetries) {
+      const delay = delays[attempt] || 15000;
+      console.log(`Rate limited (429). Retry ${attempt + 1}/${maxRetries} after ${delay / 1000}s...`);
+      await response.text(); // consume body
+      await new Promise(r => setTimeout(r, delay));
+      continue;
+    }
+    return response;
+  }
+  // Should never reach here, but just in case
+  return await fetch(url, options);
+}
+
 function getLiturgicalYear(weekStart: string): 'A' | 'B' | 'C' {
   const year = new Date(weekStart).getFullYear();
   const rem = year % 3;
@@ -60,13 +78,16 @@ Identifie précisément l'Évangile du dimanche ${sundayDate} selon le lectionna
 
 Utilise l'outil generate_spiritual_content pour fournir toutes les informations.`;
 
-    // Use tool calling for structured output
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const openRouterUrl = "https://openrouter.ai/api/v1/chat/completions";
+    const openRouterHeaders = {
+      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      "Content-Type": "application/json",
+    };
+
+    // Use fetchWithRetry for the main content generation
+    const response = await fetchWithRetry(openRouterUrl, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-      },
+      headers: openRouterHeaders,
       body: JSON.stringify({
         model: "openai/gpt-oss-120b:free",
         messages: [
@@ -125,7 +146,7 @@ Utilise l'outil generate_spiritual_content pour fournir toutes les informations.
       const errText = await response.text();
       console.error("AI error:", response.status, errText);
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+        return new Response(JSON.stringify({ error: "Le modèle est temporairement surchargé. Veuillez réessayer dans quelques minutes." }), {
           status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -169,19 +190,16 @@ Utilise l'outil generate_spiritual_content pour fournir toutes les informations.
       throw new Error("Failed to save content: " + dbError.message);
     }
 
-    // Generate daily prayers (7 days: Friday to Thursday)
+    // Generate daily prayers with retry
     const dayNames: Record<string, string[]> = {
       fr: ['Vendredi', 'Samedi', 'Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi'],
       en: ['Friday', 'Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'],
       ar: ['الجمعة', 'السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'],
     };
 
-    const prayerResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const prayerResponse = await fetchWithRetry(openRouterUrl, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-      },
+      headers: openRouterHeaders,
       body: JSON.stringify({
         model: "openai/gpt-oss-120b:free",
         messages: [
