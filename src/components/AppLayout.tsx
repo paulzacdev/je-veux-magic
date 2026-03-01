@@ -1,16 +1,23 @@
 import { ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { t, getDirection } from '@/lib/i18n';
-import { BookOpen, Heart, MessageCircle, User, Home, HandHeart, Moon, Sun } from 'lucide-react';
+import { t, getDirection, Language } from '@/lib/i18n';
+import { BookOpen, Heart, MessageCircle, User, Home, HandHeart, Moon, Sun, Globe } from 'lucide-react';
 import { useTheme } from 'next-themes';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 interface AppLayoutProps {
   children: ReactNode;
 }
 
 export default function AppLayout({ children }: AppLayoutProps) {
-  const { language } = useAuth();
+  const { language, setLanguage } = useAuth();
+
+  const languages: { code: Language; native: string }[] = [
+    { code: 'ar', native: 'عربي' },
+    { code: 'fr', native: 'Français' },
+    { code: 'en', native: 'English' },
+  ];
   const navigate = useNavigate();
   const location = useLocation();
   const dir = getDirection(language);
@@ -29,7 +36,27 @@ export default function AppLayout({ children }: AppLayoutProps) {
       {/* Header */}
       <header className="border-b border-border/60 bg-card/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="container flex items-center justify-between py-3 px-4">
-          <div className="w-9" />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="w-9 h-9 rounded-full border border-border bg-muted/50 hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-all"
+                aria-label={t('language', language)}
+              >
+                <Globe className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {languages.map(({ code, native }) => (
+                <DropdownMenuItem
+                  key={code}
+                  onClick={() => setLanguage(code)}
+                  className={language === code ? 'font-bold text-primary' : ''}
+                >
+                  {native}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <div className="text-center">
             <h1 className="text-lg font-serif font-semibold text-primary">✝ {t('app_title', language)}</h1>
             <p className="text-[10px] text-muted-foreground tracking-wider uppercase">{t('app_subtitle', language)}</p>
