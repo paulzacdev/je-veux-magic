@@ -7,6 +7,7 @@ const languages: { code: Language; label: string; native: string }[] = [
   { code: 'ar', label: 'Arabic', native: 'عربي' },
   { code: 'fr', label: 'French', native: 'Français' },
   { code: 'en', label: 'English', native: 'English' },
+  { code: 'pt', label: 'Portuguese', native: 'Português' },
 ];
 
 export default function LanguageSelect() {
