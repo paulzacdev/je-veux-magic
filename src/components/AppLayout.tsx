@@ -17,6 +17,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { code: 'ar', native: 'عربي' },
     { code: 'fr', native: 'Français' },
     { code: 'en', native: 'English' },
+    { code: 'pt', native: 'Português' },
   ];
   const navigate = useNavigate();
   const location = useLocation();
