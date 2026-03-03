@@ -37,6 +37,52 @@ const GOSPEL_READINGS: Record<string, { reference: string; celebration: string }
   "2026-04-12": { reference: "Jean 20, 19-31", celebration: "2e Dimanche de Pâques (Dimanche de la Divine Miséricorde), Année A" },
   "2026-04-19": { reference: "Luc 24, 13-35", celebration: "3e Dimanche de Pâques, Année A" },
   "2026-04-26": { reference: "Jean 10, 1-10", celebration: "4e Dimanche de Pâques, Année A" },
+  // MAY 2026 - Easter / Ascension Year A
+  "2026-05-03": { reference: "Jean 14, 1-12", celebration: "5e Dimanche de Pâques, Année A" },
+  "2026-05-10": { reference: "Jean 14, 15-21", celebration: "6e Dimanche de Pâques, Année A" },
+  "2026-05-14": { reference: "Matthieu 28, 16-20", celebration: "Ascension du Seigneur, Année A" },
+  "2026-05-17": { reference: "Jean 20, 19-23", celebration: "7e Dimanche de Pâques, Année A" },
+  "2026-05-24": { reference: "Jean 20, 19-23", celebration: "Dimanche de la Pentecôte, Année A" },
+  "2026-05-31": { reference: "Jean 3, 16-18", celebration: "Sainte Trinité, Année A" },
+  // JUNE 2026 - Ordinary Time Year A
+  "2026-06-07": { reference: "Jean 6, 51-58", celebration: "Saint-Sacrement du Corps et du Sang du Christ, Année A" },
+  "2026-06-14": { reference: "Matthieu 9, 36 — 10, 8", celebration: "11e Dimanche du Temps Ordinaire, Année A" },
+  "2026-06-21": { reference: "Matthieu 10, 26-33", celebration: "12e Dimanche du Temps Ordinaire, Année A" },
+  "2026-06-28": { reference: "Matthieu 10, 37-42", celebration: "13e Dimanche du Temps Ordinaire, Année A" },
+  // JULY 2026 - Ordinary Time Year A
+  "2026-07-05": { reference: "Matthieu 11, 25-30", celebration: "14e Dimanche du Temps Ordinaire, Année A" },
+  "2026-07-12": { reference: "Matthieu 13, 1-23", celebration: "15e Dimanche du Temps Ordinaire, Année A" },
+  "2026-07-19": { reference: "Matthieu 13, 24-43", celebration: "16e Dimanche du Temps Ordinaire, Année A" },
+  "2026-07-26": { reference: "Matthieu 13, 44-52", celebration: "17e Dimanche du Temps Ordinaire, Année A" },
+  // AUGUST 2026 - Ordinary Time Year A
+  "2026-08-02": { reference: "Matthieu 14, 13-21", celebration: "18e Dimanche du Temps Ordinaire, Année A" },
+  "2026-08-09": { reference: "Matthieu 14, 22-33", celebration: "19e Dimanche du Temps Ordinaire, Année A" },
+  "2026-08-15": { reference: "Luc 1, 39-56", celebration: "Assomption de la Vierge Marie" },
+  "2026-08-16": { reference: "Matthieu 15, 21-28", celebration: "20e Dimanche du Temps Ordinaire, Année A" },
+  "2026-08-23": { reference: "Matthieu 16, 13-20", celebration: "21e Dimanche du Temps Ordinaire, Année A" },
+  "2026-08-30": { reference: "Matthieu 16, 21-27", celebration: "22e Dimanche du Temps Ordinaire, Année A" },
+  // SEPTEMBER 2026 - Ordinary Time Year A
+  "2026-09-06": { reference: "Matthieu 18, 15-20", celebration: "23e Dimanche du Temps Ordinaire, Année A" },
+  "2026-09-13": { reference: "Matthieu 18, 21-35", celebration: "24e Dimanche du Temps Ordinaire, Année A" },
+  "2026-09-20": { reference: "Matthieu 20, 1-16", celebration: "25e Dimanche du Temps Ordinaire, Année A" },
+  "2026-09-27": { reference: "Matthieu 21, 28-32", celebration: "26e Dimanche du Temps Ordinaire, Année A" },
+  // OCTOBER 2026 - Ordinary Time Year A
+  "2026-10-04": { reference: "Matthieu 21, 33-43", celebration: "27e Dimanche du Temps Ordinaire, Année A" },
+  "2026-10-11": { reference: "Matthieu 22, 1-14", celebration: "28e Dimanche du Temps Ordinaire, Année A" },
+  "2026-10-18": { reference: "Matthieu 22, 15-21", celebration: "29e Dimanche du Temps Ordinaire, Année A" },
+  "2026-10-25": { reference: "Matthieu 22, 34-40", celebration: "30e Dimanche du Temps Ordinaire, Année A" },
+  // NOVEMBER 2026 - End of Ordinary Time / Advent Year B
+  "2026-11-01": { reference: "Matthieu 5, 1-12a", celebration: "Toussaint" },
+  "2026-11-08": { reference: "Matthieu 25, 1-13", celebration: "32e Dimanche du Temps Ordinaire, Année A" },
+  "2026-11-15": { reference: "Matthieu 25, 14-30", celebration: "33e Dimanche du Temps Ordinaire, Année A" },
+  "2026-11-22": { reference: "Matthieu 25, 31-46", celebration: "Christ Roi de l'Univers, Année A" },
+  "2026-11-29": { reference: "Marc 13, 33-37", celebration: "1er Dimanche de l'Avent, Année B" },
+  // DECEMBER 2026 - Advent / Christmas Year B
+  "2026-12-06": { reference: "Marc 1, 1-8", celebration: "2e Dimanche de l'Avent, Année B" },
+  "2026-12-13": { reference: "Jean 1, 6-8.19-28", celebration: "3e Dimanche de l'Avent, Année B" },
+  "2026-12-20": { reference: "Luc 1, 26-38", celebration: "4e Dimanche de l'Avent, Année B" },
+  "2026-12-25": { reference: "Jean 1, 1-18", celebration: "Nativité du Seigneur — Messe du Jour" },
+  "2026-12-27": { reference: "Luc 2, 22-40", celebration: "Sainte Famille, Année B" },
 };
 
 function getLiturgicalYear(weekStart: string): 'A' | 'B' | 'C' {
@@ -79,6 +125,7 @@ serve(async (req) => {
       fr: "français",
       ar: "arabe",
       en: "anglais",
+      pt: "portugais",
     };
     const langName = langNames[language] || "français";
 
