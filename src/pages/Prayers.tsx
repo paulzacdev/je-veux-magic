@@ -76,8 +76,8 @@ export default function Prayers() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="bg-muted rounded-xl p-4 border border-border">
-                    <p className="text-sm leading-relaxed whitespace-pre-line font-serif italic text-foreground">
+                  <div className="bg-muted rounded-xl p-5 border border-primary/20 shadow-inner">
+                    <p className="text-base leading-[1.9] whitespace-pre-line font-serif italic text-foreground tracking-wide">
                       {prayer.prayer_text}
                     </p>
                   </div>
