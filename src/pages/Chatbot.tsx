@@ -1,16 +1,19 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { t, getDirection } from '@/lib/i18n';
 import { supabase } from '@/integrations/supabase/client';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
-import { Send, Loader2, Trash2, Sparkles } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Send, Loader2, Trash2, Sparkles, History, MessageSquare, Plus } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { toast } from 'sonner';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  created_at?: string;
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
@@ -31,14 +34,60 @@ const SUGGESTED_QUESTIONS: Record<string, string[]> = {
     'What prayer to start my day?',
     'How to practice humility?',
   ],
+  pt: [
+    'Como viver o Evangelho desta semana?',
+    'Qual oração para começar o dia?',
+    'Como praticar a humildade?',
+  ],
 };
+
+interface HistoryGroup {
+  label: string;
+  messages: Message[];
+  firstMessage: string;
+  date: string;
+}
+
+function groupMessagesByDate(messages: Message[], language: string): HistoryGroup[] {
+  const groups: Record<string, Message[]> = {};
+  
+  messages.forEach(msg => {
+    if (!msg.created_at) return;
+    const date = new Date(msg.created_at).toLocaleDateString('fr-FR');
+    if (!groups[date]) groups[date] = [];
+    groups[date].push(msg);
+  });
+
+  const today = new Date().toLocaleDateString('fr-FR');
+  const yesterday = new Date(Date.now() - 86400000).toLocaleDateString('fr-FR');
+
+  return Object.entries(groups)
+    .sort(([a], [b]) => {
+      const da = a.split('/').reverse().join('-');
+      const db = b.split('/').reverse().join('-');
+      return db.localeCompare(da);
+    })
+    .map(([date, msgs]) => {
+      const userMsgs = msgs.filter(m => m.role === 'user');
+      const firstMessage = userMsgs[0]?.content?.slice(0, 60) || '...';
+      let label = date;
+      if (date === today) {
+        label = language === 'ar' ? 'اليوم' : language === 'en' ? 'Today' : language === 'pt' ? 'Hoje' : 'Aujourd\'hui';
+      } else if (date === yesterday) {
+        label = language === 'ar' ? 'أمس' : language === 'en' ? 'Yesterday' : language === 'pt' ? 'Ontem' : 'Hier';
+      }
+      return { label, messages: msgs, firstMessage, date };
+    });
+}
 
 export default function Chatbot() {
   const { language, user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
+  const [allMessages, setAllMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dir = getDirection(language);
@@ -51,12 +100,18 @@ export default function Chatbot() {
     if (!user || historyLoaded) return;
     supabase
       .from('chat_messages')
-      .select('role, content')
+      .select('role, content, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: true })
-      .limit(50)
+      .limit(200)
       .then(({ data }) => {
-        if (data && data.length > 0) setMessages(data as Message[]);
+        if (data && data.length > 0) {
+          setAllMessages(data as Message[]);
+          // Show today's messages
+          const today = new Date().toLocaleDateString('fr-FR');
+          const todayMsgs = data.filter(m => new Date(m.created_at!).toLocaleDateString('fr-FR') === today);
+          setMessages(todayMsgs.length > 0 ? todayMsgs as Message[] : data.slice(-20) as Message[]);
+        }
         setHistoryLoaded(true);
       });
   }, [user, historyLoaded]);
@@ -69,12 +124,25 @@ export default function Chatbot() {
     ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
   }, [input]);
 
+  const historyGroups = useMemo(() => groupMessagesByDate(allMessages, language), [allMessages, language]);
+
+  const loadConversation = (group: HistoryGroup) => {
+    setMessages(group.messages);
+    setHistoryOpen(false);
+  };
+
+  const startNewConversation = () => {
+    setMessages([]);
+    setHistoryOpen(false);
+  };
+
   const sendMessage = async (text?: string) => {
     const msgText = (text ?? input).trim();
     if (!msgText || isLoading || !user) return;
-    const userMsg: Message = { role: 'user', content: msgText };
+    const userMsg: Message = { role: 'user', content: msgText, created_at: new Date().toISOString() };
     setInput('');
     setMessages(prev => [...prev, userMsg]);
+    setAllMessages(prev => [...prev, userMsg]);
     setIsLoading(true);
 
     await supabase.from('chat_messages').insert({
@@ -141,6 +209,8 @@ export default function Chatbot() {
       }
 
       if (assistantText) {
+        const assistantMsg: Message = { role: 'assistant', content: assistantText, created_at: new Date().toISOString() };
+        setAllMessages(prev => [...prev, assistantMsg]);
         await supabase.from('chat_messages').insert({
           user_id: user.id,
           role: 'assistant',
@@ -157,7 +227,8 @@ export default function Chatbot() {
     if (!user) return;
     await supabase.from('chat_messages').delete().eq('user_id', user.id);
     setMessages([]);
-    toast.success('Conversation effacée');
+    setAllMessages([]);
+    toast.success(language === 'ar' ? 'تم مسح المحادثة' : language === 'en' ? 'Conversation cleared' : language === 'pt' ? 'Conversa apagada' : 'Conversation effacée');
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -182,22 +253,88 @@ export default function Chatbot() {
             </div>
             <div>
               <p className="font-serif font-semibold text-foreground text-sm leading-tight">
-                {language === 'ar' ? 'المرشد الروحي' : language === 'en' ? 'Spiritual Guide' : 'Guide Spirituel'}
+                {language === 'ar' ? 'المرشد الروحي' : language === 'en' ? 'Spiritual Guide' : language === 'pt' ? 'Guia Espiritual' : 'Guide Spirituel'}
               </p>
               <p className="text-[10px] text-muted-foreground">
-                {language === 'ar' ? 'مدعوم بالذكاء الاصطناعي' : language === 'en' ? 'AI-powered' : 'Propulsé par l\'IA'}
+                {language === 'ar' ? 'مدعوم بالذكاء الاصطناعي' : language === 'en' ? 'AI-powered' : language === 'pt' ? 'Com IA' : 'Propulsé par l\'IA'}
               </p>
             </div>
           </div>
-          {messages.length > 0 && (
+          <div className="flex items-center gap-1">
+            {/* New conversation */}
             <button
-              onClick={clearHistory}
-              className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-              title="Effacer l'historique"
+              onClick={startNewConversation}
+              className="p-2 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+              title={language === 'ar' ? 'محادثة جديدة' : language === 'en' ? 'New conversation' : language === 'pt' ? 'Nova conversa' : 'Nouvelle conversation'}
             >
-              <Trash2 className="h-4 w-4" />
+              <Plus className="h-4 w-4" />
             </button>
-          )}
+
+            {/* History drawer */}
+            <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
+              <SheetTrigger asChild>
+                <button
+                  className="p-2 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                  title={language === 'ar' ? 'السجل' : language === 'en' ? 'History' : language === 'pt' ? 'Histórico' : 'Historique'}
+                >
+                  <History className="h-4 w-4" />
+                </button>
+              </SheetTrigger>
+              <SheetContent side={dir === 'rtl' ? 'right' : 'left'} className="w-[300px] sm:w-[350px]">
+                <SheetHeader>
+                  <SheetTitle className="font-serif flex items-center gap-2">
+                    <History className="h-4 w-4" />
+                    {language === 'ar' ? 'سجل المحادثات' : language === 'en' ? 'Conversation History' : language === 'pt' ? 'Histórico de Conversas' : 'Historique des conversations'}
+                  </SheetTitle>
+                </SheetHeader>
+                <ScrollArea className="h-[calc(100vh-120px)] mt-4">
+                  {historyGroups.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground text-sm">
+                      <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                      {language === 'ar' ? 'لا توجد محادثات' : language === 'en' ? 'No conversations yet' : language === 'pt' ? 'Nenhuma conversa ainda' : 'Aucune conversation'}
+                    </div>
+                  ) : (
+                    <div className="space-y-4 pr-4">
+                      {historyGroups.map((group) => (
+                        <div key={group.date}>
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                            {group.label}
+                          </p>
+                          <button
+                            onClick={() => loadConversation(group)}
+                            className="w-full text-left p-3 rounded-xl border border-border bg-card hover:bg-accent/50 hover:border-primary/30 transition-all group"
+                          >
+                            <div className="flex items-start gap-2">
+                              <MessageSquare className="h-4 w-4 mt-0.5 text-primary/60 flex-shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                                  {group.firstMessage}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground mt-1">
+                                  {group.messages.length} {language === 'ar' ? 'رسالة' : language === 'en' ? 'messages' : language === 'pt' ? 'mensagens' : 'messages'}
+                                </p>
+                              </div>
+                            </div>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </SheetContent>
+            </Sheet>
+
+            {/* Clear */}
+            {messages.length > 0 && (
+              <button
+                onClick={clearHistory}
+                className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                title={language === 'ar' ? 'مسح' : language === 'en' ? 'Clear' : language === 'pt' ? 'Limpar' : 'Effacer'}
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Messages area */}
@@ -216,13 +353,15 @@ export default function Chatbot() {
               </div>
               <div className="text-center space-y-1 px-4">
                 <p className="font-serif text-lg font-semibold text-foreground">
-                  {language === 'ar' ? 'كيف يمكنني مساعدتك؟' : language === 'en' ? 'How can I help you?' : 'Comment puis-je vous aider ?'}
+                  {language === 'ar' ? 'كيف يمكنني مساعدتك؟' : language === 'en' ? 'How can I help you?' : language === 'pt' ? 'Como posso ajudá-lo?' : 'Comment puis-je vous aider ?'}
                 </p>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {language === 'ar'
                     ? 'اطرح سؤالاً روحياً أو ابدأ محادثة'
                     : language === 'en'
                     ? 'Ask a spiritual question or start a conversation'
+                    : language === 'pt'
+                    ? 'Faça uma pergunta espiritual ou inicie uma conversa'
                     : 'Posez une question spirituelle ou commencez une conversation'}
                 </p>
               </div>
@@ -249,14 +388,12 @@ export default function Chatbot() {
               key={i}
               className={`flex items-end gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
             >
-              {/* Avatar */}
               {msg.role === 'assistant' && (
                 <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 border border-primary/20 flex items-center justify-center text-xs flex-shrink-0 mb-0.5 text-primary font-serif">
                   ✝
                 </div>
               )}
 
-              {/* Bubble */}
               <div
                 className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
                   msg.role === 'user'
@@ -321,7 +458,7 @@ export default function Chatbot() {
             </Button>
           </div>
           <p className="text-center text-[10px] text-muted-foreground mt-1.5">
-            {language === 'ar' ? 'اضغط Enter للإرسال • Shift+Enter لسطر جديد' : language === 'en' ? 'Enter to send • Shift+Enter for new line' : 'Entrée pour envoyer • Maj+Entrée pour nouvelle ligne'}
+            {language === 'ar' ? 'اضغط Enter للإرسال • Shift+Enter لسطر جديد' : language === 'en' ? 'Enter to send • Shift+Enter for new line' : language === 'pt' ? 'Enter para enviar • Shift+Enter para nova linha' : 'Entrée pour envoyer • Maj+Entrée pour nouvelle ligne'}
           </p>
         </div>
       </div>

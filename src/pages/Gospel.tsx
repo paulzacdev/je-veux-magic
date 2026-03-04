@@ -48,8 +48,8 @@ export default function Gospel() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="bg-muted rounded-xl p-4 border border-border">
-                  <p className="leading-relaxed text-sm whitespace-pre-line font-serif text-foreground italic">
+                <div className="bg-muted rounded-xl p-5 border border-primary/20 shadow-inner">
+                  <p className="leading-[1.9] text-base whitespace-pre-line font-serif text-foreground italic tracking-wide">
                     {content.gospel_text}
                   </p>
                 </div>
@@ -65,7 +65,7 @@ export default function Gospel() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="prose prose-sm max-w-none text-foreground leading-relaxed">
+                  <div className="prose prose-base max-w-none text-foreground leading-[1.8]">
                     <ReactMarkdown>{content.commentary}</ReactMarkdown>
                   </div>
                 </CardContent>
@@ -85,7 +85,7 @@ export default function Gospel() {
                     {content.christian_advice.map((advice, i) => (
                       <li key={i} className="flex gap-3 text-sm">
                         <span className="text-primary font-bold mt-0.5 flex-shrink-0">{i + 1}.</span>
-                        <span className="leading-relaxed">{advice}</span>
+                        <span className="leading-relaxed text-base">{advice}</span>
                       </li>
                     ))}
                   </ul>
