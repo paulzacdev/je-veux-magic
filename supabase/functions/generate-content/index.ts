@@ -6,6 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const ALLOWED_LANGUAGES = ['fr', 'ar', 'en', 'pt'];
+
 // Retry wrapper with exponential backoff for rate limits
 async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
   const delays = [5000, 10000, 15000];
@@ -24,7 +26,6 @@ async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3)
 }
 
 // Hardcoded correct Gospel readings from the Catholic Roman Lectionary
-// Key: Sunday date (YYYY-MM-DD), Value: { reference, celebration }
 const GOSPEL_READINGS: Record<string, { reference: string; celebration: string }> = {
   // MARCH 2026 - Lent Year A
   "2026-03-01": { reference: "Matthieu 17, 1-9", celebration: "2e Dimanche de Carême, Année A" },
@@ -49,35 +50,35 @@ const GOSPEL_READINGS: Record<string, { reference: string; celebration: string }
   "2026-06-14": { reference: "Matthieu 9, 36 — 10, 8", celebration: "11e Dimanche du Temps Ordinaire, Année A" },
   "2026-06-21": { reference: "Matthieu 10, 26-33", celebration: "12e Dimanche du Temps Ordinaire, Année A" },
   "2026-06-28": { reference: "Matthieu 10, 37-42", celebration: "13e Dimanche du Temps Ordinaire, Année A" },
-  // JULY 2026 - Ordinary Time Year A
+  // JULY 2026
   "2026-07-05": { reference: "Matthieu 11, 25-30", celebration: "14e Dimanche du Temps Ordinaire, Année A" },
   "2026-07-12": { reference: "Matthieu 13, 1-23", celebration: "15e Dimanche du Temps Ordinaire, Année A" },
   "2026-07-19": { reference: "Matthieu 13, 24-43", celebration: "16e Dimanche du Temps Ordinaire, Année A" },
   "2026-07-26": { reference: "Matthieu 13, 44-52", celebration: "17e Dimanche du Temps Ordinaire, Année A" },
-  // AUGUST 2026 - Ordinary Time Year A
+  // AUGUST 2026
   "2026-08-02": { reference: "Matthieu 14, 13-21", celebration: "18e Dimanche du Temps Ordinaire, Année A" },
   "2026-08-09": { reference: "Matthieu 14, 22-33", celebration: "19e Dimanche du Temps Ordinaire, Année A" },
   "2026-08-15": { reference: "Luc 1, 39-56", celebration: "Assomption de la Vierge Marie" },
   "2026-08-16": { reference: "Matthieu 15, 21-28", celebration: "20e Dimanche du Temps Ordinaire, Année A" },
   "2026-08-23": { reference: "Matthieu 16, 13-20", celebration: "21e Dimanche du Temps Ordinaire, Année A" },
   "2026-08-30": { reference: "Matthieu 16, 21-27", celebration: "22e Dimanche du Temps Ordinaire, Année A" },
-  // SEPTEMBER 2026 - Ordinary Time Year A
+  // SEPTEMBER 2026
   "2026-09-06": { reference: "Matthieu 18, 15-20", celebration: "23e Dimanche du Temps Ordinaire, Année A" },
   "2026-09-13": { reference: "Matthieu 18, 21-35", celebration: "24e Dimanche du Temps Ordinaire, Année A" },
   "2026-09-20": { reference: "Matthieu 20, 1-16", celebration: "25e Dimanche du Temps Ordinaire, Année A" },
   "2026-09-27": { reference: "Matthieu 21, 28-32", celebration: "26e Dimanche du Temps Ordinaire, Année A" },
-  // OCTOBER 2026 - Ordinary Time Year A
+  // OCTOBER 2026
   "2026-10-04": { reference: "Matthieu 21, 33-43", celebration: "27e Dimanche du Temps Ordinaire, Année A" },
   "2026-10-11": { reference: "Matthieu 22, 1-14", celebration: "28e Dimanche du Temps Ordinaire, Année A" },
   "2026-10-18": { reference: "Matthieu 22, 15-21", celebration: "29e Dimanche du Temps Ordinaire, Année A" },
   "2026-10-25": { reference: "Matthieu 22, 34-40", celebration: "30e Dimanche du Temps Ordinaire, Année A" },
-  // NOVEMBER 2026 - End of Ordinary Time / Advent Year B
+  // NOVEMBER 2026
   "2026-11-01": { reference: "Matthieu 5, 1-12a", celebration: "Toussaint" },
   "2026-11-08": { reference: "Matthieu 25, 1-13", celebration: "32e Dimanche du Temps Ordinaire, Année A" },
   "2026-11-15": { reference: "Matthieu 25, 14-30", celebration: "33e Dimanche du Temps Ordinaire, Année A" },
   "2026-11-22": { reference: "Matthieu 25, 31-46", celebration: "Christ Roi de l'Univers, Année A" },
   "2026-11-29": { reference: "Marc 13, 33-37", celebration: "1er Dimanche de l'Avent, Année B" },
-  // DECEMBER 2026 - Advent / Christmas Year B
+  // DECEMBER 2026
   "2026-12-06": { reference: "Marc 1, 1-8", celebration: "2e Dimanche de l'Avent, Année B" },
   "2026-12-13": { reference: "Jean 1, 6-8.19-28", celebration: "3e Dimanche de l'Avent, Année B" },
   "2026-12-20": { reference: "Luc 1, 26-38", celebration: "4e Dimanche de l'Avent, Année B" },
@@ -106,8 +107,36 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    // --- Auth validation ---
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    const supabaseAuth = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // --- Input validation ---
     const { language, weekStart } = await req.json();
 
+    if (!ALLOWED_LANGUAGES.includes(language)) {
+      return new Response(JSON.stringify({ error: 'Invalid language' }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
+      return new Response(JSON.stringify({ error: 'Invalid weekStart format' }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // --- Use service role client for DB writes (after auth is confirmed) ---
     const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -117,8 +146,6 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
     const { sundayDate, liturgicalYear } = getWeekInfo(weekStart);
-
-    // Look up the correct Gospel reading from the hardcoded table
     const knownReading = GOSPEL_READINGS[sundayDate];
 
     const langNames: Record<string, string> = {
@@ -136,7 +163,6 @@ Tu rédiges des contenus spirituels catholiques pour l'application "Évangile V�
 Tes réponses sont toujours théologiquement fiables, pastorales, accessibles aux fidèles, et profondément enracinées dans la Tradition catholique.
 Tu réponds UNIQUEMENT en ${langName}.`;
 
-    // Build the user prompt differently depending on whether we have the correct reference
     let userPrompt: string;
     if (knownReading) {
       userPrompt = `Génère le contenu spirituel complet pour la semaine liturgique commençant le vendredi ${weekStart}.
@@ -181,38 +207,18 @@ Utilise l'outil generate_spiritual_content pour fournir toutes les informations.
               parameters: {
                 type: "object",
                 properties: {
-                  gospel_reference: {
-                    type: "string",
-                    description: "Référence de l'Évangile ex: Matthieu 5, 1-12"
-                  },
-                  gospel_text: {
-                    type: "string",
-                    description: "Texte complet de l'Évangile (15-40 versets)"
-                  },
-                  commentary: {
-                    type: "string",
-                    description: "Commentaire théologique de 400-600 mots inspiré des Pères de l'Église (Saint Augustin, Saint Thomas d'Aquin). Inclus des citations patristiques."
-                  },
-                  meditation: {
-                    type: "string",
-                    description: "Méditation spirituelle de 300-400 mots pour accompagner le fidèle toute la semaine"
-                  },
-                  virtues: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "3 vertus chrétiennes à pratiquer cette semaine, chacune avec nom et explication concrète (50-70 mots)"
-                  },
-                  christian_advice: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "5 conseils pratiques et concrets pour vivre l'Évangile cette semaine"
-                  }
+                  gospel_reference: { type: "string", description: "Référence de l'Évangile ex: Matthieu 5, 1-12" },
+                  gospel_text: { type: "string", description: "Texte complet de l'Évangile (15-40 versets)" },
+                  commentary: { type: "string", description: "Commentaire théologique de 400-600 mots inspiré des Pères de l'Église" },
+                  meditation: { type: "string", description: "Méditation spirituelle de 300-400 mots" },
+                  virtues: { type: "array", items: { type: "string" }, description: "3 vertus chrétiennes à pratiquer cette semaine" },
+                  christian_advice: { type: "array", items: { type: "string" }, description: "5 conseils pratiques pour vivre l'Évangile" },
                 },
                 required: ["gospel_reference", "gospel_text", "commentary", "meditation", "virtues", "christian_advice"],
-                additionalProperties: false
-              }
-            }
-          }
+                additionalProperties: false,
+              },
+            },
+          },
         ],
         tool_choice: { type: "function", function: { name: "generate_spiritual_content" } },
         temperature: 0.7,
@@ -233,7 +239,7 @@ Utilise l'outil generate_spiritual_content pour fournir toutes les informations.
 
     const aiData = await response.json();
     const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-    
+
     if (!toolCall) {
       console.error("No tool call in response:", JSON.stringify(aiData).slice(0, 500));
       throw new Error("No tool call returned from AI");
@@ -247,12 +253,10 @@ Utilise l'outil generate_spiritual_content pour fournir toutes les informations.
       throw new Error("Failed to parse tool call arguments");
     }
 
-    // If we have a known reference, force it in the saved data to prevent AI hallucination
     if (knownReading) {
       parsed.gospel_reference = knownReading.reference;
     }
 
-    // Save to database
     const { data: savedContent, error: dbError } = await supabase
       .from("weekly_content")
       .upsert({
@@ -273,7 +277,7 @@ Utilise l'outil generate_spiritual_content pour fournir toutes les informations.
       throw new Error("Failed to save content: " + dbError.message);
     }
 
-    // Generate daily prayers with retry
+    // Generate daily prayers
     const dayNames: Record<string, string[]> = {
       fr: ['Vendredi', 'Samedi', 'Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi'],
       en: ['Friday', 'Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'],
@@ -289,8 +293,8 @@ Utilise l'outil generate_spiritual_content pour fournir toutes les informations.
           { role: "system", content: systemPrompt },
           {
             role: "user",
-            content: `Pour l'Évangile du dimanche "${parsed.gospel_reference}", génère 7 prières quotidiennes (une par jour, du vendredi au jeudi) inspirées de cet Évangile. Chaque prière doit être différente, belle, poétique, profonde (100-150 mots), ancrée dans la Tradition catholique. Les jours sont: ${(dayNames[language] || dayNames.fr).join(', ')}.`
-          }
+            content: `Pour l'Évangile du dimanche "${parsed.gospel_reference}", génère 7 prières quotidiennes (une par jour, du vendredi au jeudi) inspirées de cet Évangile. Chaque prière doit être différente, belle, poétique, profonde (100-150 mots), ancrée dans la Tradition catholique. Les jours sont: ${(dayNames[language] || dayNames.fr).join(', ')}.`,
+          },
         ],
         tools: [
           {
@@ -308,18 +312,18 @@ Utilise l'outil generate_spiritual_content pour fournir toutes les informations.
                       properties: {
                         day: { type: "number", description: "0=Vendredi, 1=Samedi, 2=Dimanche, 3=Lundi, 4=Mardi, 5=Mercredi, 6=Jeudi" },
                         title: { type: "string" },
-                        text: { type: "string" }
+                        text: { type: "string" },
                       },
                       required: ["day", "title", "text"],
-                      additionalProperties: false
-                    }
-                  }
+                      additionalProperties: false,
+                    },
+                  },
                 },
                 required: ["prayers"],
-                additionalProperties: false
-              }
-            }
-          }
+                additionalProperties: false,
+              },
+            },
+          },
         ],
         tool_choice: { type: "function", function: { name: "generate_daily_prayers" } },
         temperature: 0.7,
