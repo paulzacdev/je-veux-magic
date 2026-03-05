@@ -44,29 +44,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Get initial session first
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session?.user) {
-        fetchProfile(session.user.id);
+    // Set up auth listener FIRST (before getSession) per Supabase best practices
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      setSession(newSession);
+
+      if (event === 'SIGNED_OUT') {
+        setProfile(null);
+        queryClient.clear();
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (newSession?.user) {
+          // Don't reset profile to null — causes blank flash. Just fetch new one.
+          setTimeout(() => fetchProfile(newSession.user.id), 0);
+        }
       }
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setSession(session);
-      
-      if (event === 'SIGNED_OUT') {
-        // Clear everything on sign out
-        setProfile(null);
-        queryClient.clear();
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        if (session?.user) {
-          // Reset profile before fetching new one to avoid showing stale data
-          setProfile(null);
-          // Use setTimeout to avoid Supabase auth deadlock
-          setTimeout(() => fetchProfile(session.user.id), 0);
-        }
+    // Then get initial session
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      setSession(initialSession);
+      if (initialSession?.user) {
+        fetchProfile(initialSession.user.id);
       }
       setLoading(false);
     });
