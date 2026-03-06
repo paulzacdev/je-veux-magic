@@ -25,82 +25,53 @@ async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3)
   return await fetch(url, options);
 }
 
-// Hardcoded correct Gospel readings from the Catholic Roman Lectionary
-const GOSPEL_READINGS: Record<string, { reference: string; celebration: string }> = {
-  // MARCH 2026 - Lent Year A
-  "2026-03-01": { reference: "Matthieu 17, 1-9", celebration: "2e Dimanche de Carême, Année A" },
-  "2026-03-08": { reference: "Jean 4, 5-42", celebration: "3e Dimanche de Carême, Année A" },
-  "2026-03-15": { reference: "Jean 9, 1-41", celebration: "4e Dimanche de Carême, Année A" },
-  "2026-03-22": { reference: "Jean 11, 1-45", celebration: "5e Dimanche de Carême, Année A" },
-  "2026-03-29": { reference: "Matthieu 26, 14 — 27, 66", celebration: "Dimanche des Rameaux et de la Passion, Année A" },
-  // APRIL 2026 - Easter Year A
-  "2026-04-05": { reference: "Jean 20, 1-9", celebration: "Dimanche de Pâques" },
-  "2026-04-12": { reference: "Jean 20, 19-31", celebration: "2e Dimanche de Pâques (Dimanche de la Divine Miséricorde), Année A" },
-  "2026-04-19": { reference: "Luc 24, 13-35", celebration: "3e Dimanche de Pâques, Année A" },
-  "2026-04-26": { reference: "Jean 10, 1-10", celebration: "4e Dimanche de Pâques, Année A" },
-  // MAY 2026 - Easter / Ascension Year A
-  "2026-05-03": { reference: "Jean 14, 1-12", celebration: "5e Dimanche de Pâques, Année A" },
-  "2026-05-10": { reference: "Jean 14, 15-21", celebration: "6e Dimanche de Pâques, Année A" },
-  "2026-05-14": { reference: "Matthieu 28, 16-20", celebration: "Ascension du Seigneur, Année A" },
-  "2026-05-17": { reference: "Jean 20, 19-23", celebration: "7e Dimanche de Pâques, Année A" },
-  "2026-05-24": { reference: "Jean 20, 19-23", celebration: "Dimanche de la Pentecôte, Année A" },
-  "2026-05-31": { reference: "Jean 3, 16-18", celebration: "Sainte Trinité, Année A" },
-  // JUNE 2026 - Ordinary Time Year A
-  "2026-06-07": { reference: "Jean 6, 51-58", celebration: "Saint-Sacrement du Corps et du Sang du Christ, Année A" },
-  "2026-06-14": { reference: "Matthieu 9, 36 — 10, 8", celebration: "11e Dimanche du Temps Ordinaire, Année A" },
-  "2026-06-21": { reference: "Matthieu 10, 26-33", celebration: "12e Dimanche du Temps Ordinaire, Année A" },
-  "2026-06-28": { reference: "Matthieu 10, 37-42", celebration: "13e Dimanche du Temps Ordinaire, Année A" },
-  // JULY 2026
-  "2026-07-05": { reference: "Matthieu 11, 25-30", celebration: "14e Dimanche du Temps Ordinaire, Année A" },
-  "2026-07-12": { reference: "Matthieu 13, 1-23", celebration: "15e Dimanche du Temps Ordinaire, Année A" },
-  "2026-07-19": { reference: "Matthieu 13, 24-43", celebration: "16e Dimanche du Temps Ordinaire, Année A" },
-  "2026-07-26": { reference: "Matthieu 13, 44-52", celebration: "17e Dimanche du Temps Ordinaire, Année A" },
-  // AUGUST 2026
-  "2026-08-02": { reference: "Matthieu 14, 13-21", celebration: "18e Dimanche du Temps Ordinaire, Année A" },
-  "2026-08-09": { reference: "Matthieu 14, 22-33", celebration: "19e Dimanche du Temps Ordinaire, Année A" },
-  "2026-08-15": { reference: "Luc 1, 39-56", celebration: "Assomption de la Vierge Marie" },
-  "2026-08-16": { reference: "Matthieu 15, 21-28", celebration: "20e Dimanche du Temps Ordinaire, Année A" },
-  "2026-08-23": { reference: "Matthieu 16, 13-20", celebration: "21e Dimanche du Temps Ordinaire, Année A" },
-  "2026-08-30": { reference: "Matthieu 16, 21-27", celebration: "22e Dimanche du Temps Ordinaire, Année A" },
-  // SEPTEMBER 2026
-  "2026-09-06": { reference: "Matthieu 18, 15-20", celebration: "23e Dimanche du Temps Ordinaire, Année A" },
-  "2026-09-13": { reference: "Matthieu 18, 21-35", celebration: "24e Dimanche du Temps Ordinaire, Année A" },
-  "2026-09-20": { reference: "Matthieu 20, 1-16", celebration: "25e Dimanche du Temps Ordinaire, Année A" },
-  "2026-09-27": { reference: "Matthieu 21, 28-32", celebration: "26e Dimanche du Temps Ordinaire, Année A" },
-  // OCTOBER 2026
-  "2026-10-04": { reference: "Matthieu 21, 33-43", celebration: "27e Dimanche du Temps Ordinaire, Année A" },
-  "2026-10-11": { reference: "Matthieu 22, 1-14", celebration: "28e Dimanche du Temps Ordinaire, Année A" },
-  "2026-10-18": { reference: "Matthieu 22, 15-21", celebration: "29e Dimanche du Temps Ordinaire, Année A" },
-  "2026-10-25": { reference: "Matthieu 22, 34-40", celebration: "30e Dimanche du Temps Ordinaire, Année A" },
-  // NOVEMBER 2026
-  "2026-11-01": { reference: "Matthieu 5, 1-12a", celebration: "Toussaint" },
-  "2026-11-08": { reference: "Matthieu 25, 1-13", celebration: "32e Dimanche du Temps Ordinaire, Année A" },
-  "2026-11-15": { reference: "Matthieu 25, 14-30", celebration: "33e Dimanche du Temps Ordinaire, Année A" },
-  "2026-11-22": { reference: "Matthieu 25, 31-46", celebration: "Christ Roi de l'Univers, Année A" },
-  "2026-11-29": { reference: "Marc 13, 33-37", celebration: "1er Dimanche de l'Avent, Année B" },
-  // DECEMBER 2026
-  "2026-12-06": { reference: "Marc 1, 1-8", celebration: "2e Dimanche de l'Avent, Année B" },
-  "2026-12-13": { reference: "Jean 1, 6-8.19-28", celebration: "3e Dimanche de l'Avent, Année B" },
-  "2026-12-20": { reference: "Luc 1, 26-38", celebration: "4e Dimanche de l'Avent, Année B" },
-  "2026-12-25": { reference: "Jean 1, 1-18", celebration: "Nativité du Seigneur — Messe du Jour" },
-  "2026-12-27": { reference: "Luc 2, 22-40", celebration: "Sainte Famille, Année B" },
-};
-
-function getLiturgicalYear(weekStart: string): 'A' | 'B' | 'C' {
-  const year = new Date(weekStart).getFullYear();
-  const rem = year % 3;
-  if (rem === 1) return 'A';
-  if (rem === 2) return 'B';
-  return 'C';
+// Fetch Gospel from AELF API
+async function fetchGospelFromAELF(sundayDate: string): Promise<{ reference: string; text: string; celebration: string } | null> {
+  try {
+    const url = `https://api.aelf.org/v1/messes/${sundayDate}/afrique`;
+    console.log(`Fetching AELF API: ${url}`);
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error(`AELF API error: ${response.status}`);
+      return null;
+    }
+    const data = await response.json();
+    
+    const celebration = data.informations?.jour_liturgique_nom || data.informations?.ligne1 || "";
+    
+    // Find the Gospel reading in lectures
+    const messe = data.messes?.[0];
+    if (!messe?.lectures) return null;
+    
+    const evangile = messe.lectures.find((l: any) => l.type === "evangile");
+    if (!evangile) {
+      console.error("No evangile found in AELF response");
+      return null;
+    }
+    
+    const reference = evangile.ref || "";
+    // Strip HTML tags from contenu to get plain text
+    const text = (evangile.contenu || "")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/g, " ")
+      .replace(/\u00a0/g, " ")
+      .trim();
+    
+    console.log(`AELF Gospel found: ${reference} (${celebration})`);
+    return { reference, text, celebration };
+  } catch (e) {
+    console.error("AELF fetch error:", e);
+    return null;
+  }
 }
 
-function getWeekInfo(weekStart: string): { sundayDate: string; liturgicalYear: string } {
+function getWeekInfo(weekStart: string): { sundayDate: string } {
   const friday = new Date(weekStart);
   const sunday = new Date(friday);
   sunday.setDate(friday.getDate() + 2);
   const sundayDate = sunday.toISOString().split('T')[0];
-  const year = getLiturgicalYear(weekStart);
-  return { sundayDate, liturgicalYear: year };
+  return { sundayDate };
 }
 
 serve(async (req) => {
@@ -145,8 +116,10 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
-    const { sundayDate, liturgicalYear } = getWeekInfo(weekStart);
-    const knownReading = GOSPEL_READINGS[sundayDate];
+    const { sundayDate } = getWeekInfo(weekStart);
+    
+    // Fetch Gospel from AELF API
+    const aelfGospel = await fetchGospelFromAELF(sundayDate);
 
     const langNames: Record<string, string> = {
       fr: "français",
@@ -164,21 +137,32 @@ Tes réponses sont toujours théologiquement fiables, pastorales, accessibles au
 Tu réponds UNIQUEMENT en ${langName}.`;
 
     let userPrompt: string;
-    if (knownReading) {
+    if (aelfGospel) {
+      // We have the exact Gospel from AELF - use it directly
       userPrompt = `Génère le contenu spirituel complet pour la semaine liturgique commençant le vendredi ${weekStart}.
-Le dimanche de cette semaine est le ${sundayDate} — ${knownReading.celebration}.
+Le dimanche de cette semaine est le ${sundayDate} — ${aelfGospel.celebration}.
 
-L'Évangile de ce dimanche est : **${knownReading.reference}**.
-C'est une donnée certaine du lectionnaire catholique romain officiel. Tu dois utiliser EXACTEMENT cette référence.
+L'Évangile de ce dimanche est : **${aelfGospel.reference}**.
+C'est une donnée officielle tirée directement de l'API du lectionnaire AELF. Tu dois utiliser EXACTEMENT cette référence.
 
-Reproduis le texte intégral de cet Évangile (${knownReading.reference}) et génère le contenu spirituel correspondant.
+Voici le texte intégral de l'Évangile tel que fourni par le lectionnaire officiel :
+---
+${aelfGospel.text}
+---
+
+Tu dois utiliser CE TEXTE EXACT comme base. Ne le modifie pas, ne le remplace pas.
+Génère le contenu spirituel correspondant (commentaire, méditation, vertus, conseils).
+
+${language !== 'fr' ? `IMPORTANT: Traduis le texte de l'Évangile et tout le contenu en ${langName}. La référence biblique reste en format international.` : ''}
 
 Utilise l'outil generate_spiritual_content pour fournir toutes les informations.`;
     } else {
+      // Fallback if AELF API fails
+      console.warn("AELF API failed, falling back to AI-generated reference");
       userPrompt = `Génère le contenu spirituel complet pour la semaine liturgique commençant le vendredi ${weekStart}.
-Le dimanche de cette semaine est le ${sundayDate} (Année liturgique ${liturgicalYear}).
+Le dimanche de cette semaine est le ${sundayDate}.
 
-Identifie précisément l'Évangile du dimanche ${sundayDate} selon le lectionnaire catholique romain officiel (année ${liturgicalYear}).
+Identifie précisément l'Évangile du dimanche ${sundayDate} selon le lectionnaire catholique romain officiel.
 
 Utilise l'outil generate_spiritual_content pour fournir toutes les informations.`;
     }
@@ -208,7 +192,7 @@ Utilise l'outil generate_spiritual_content pour fournir toutes les informations.
                 type: "object",
                 properties: {
                   gospel_reference: { type: "string", description: "Référence de l'Évangile ex: Matthieu 5, 1-12" },
-                  gospel_text: { type: "string", description: "Texte complet de l'Évangile (15-40 versets)" },
+                  gospel_text: { type: "string", description: "Texte complet de l'Évangile" },
                   commentary: { type: "string", description: "Commentaire théologique de 400-600 mots inspiré des Pères de l'Église" },
                   meditation: { type: "string", description: "Méditation spirituelle de 300-400 mots" },
                   virtues: { type: "array", items: { type: "string" }, description: "3 vertus chrétiennes à pratiquer cette semaine" },
@@ -253,8 +237,13 @@ Utilise l'outil generate_spiritual_content pour fournir toutes les informations.
       throw new Error("Failed to parse tool call arguments");
     }
 
-    if (knownReading) {
-      parsed.gospel_reference = knownReading.reference;
+    // Force the AELF reference and text if available
+    if (aelfGospel) {
+      parsed.gospel_reference = aelfGospel.reference;
+      // For French, use the official AELF text directly
+      if (language === 'fr') {
+        parsed.gospel_text = aelfGospel.text;
+      }
     }
 
     const { data: savedContent, error: dbError } = await supabase
@@ -359,8 +348,7 @@ Utilise l'outil generate_spiritual_content pour fournir toutes les informations.
   } catch (e: any) {
     console.error("generate-content error:", e);
     return new Response(JSON.stringify({ error: e.message || "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
