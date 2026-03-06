@@ -1,14 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { Eye, EyeOff, Loader2, ArrowLeft } from 'lucide-react';
-import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
+import { Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react';
 
-type AuthStep = 'form' | 'otp';
+type AuthStep = 'form' | 'check-email' | 'confirmed';
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -18,7 +17,14 @@ export default function Auth() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<AuthStep>('form');
-  const [otpCode, setOtpCode] = useState('');
+
+  // Detect confirmation redirect from email link
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash && hash.includes('type=signup')) {
+      setStep('confirmed');
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,11 +49,11 @@ export default function Auth() {
           password,
           options: {
             data: { display_name: displayName.trim() },
+            emailRedirectTo: window.location.origin,
           },
         });
         if (error) throw error;
-        toast.success('Un code de vérification a été envoyé à votre e-mail.');
-        setStep('otp');
+        setStep('check-email');
       }
     } catch (err: any) {
       console.error('Auth error:', err);
@@ -57,108 +63,60 @@ export default function Auth() {
     }
   };
 
-  const handleVerifyOtp = async () => {
-    if (otpCode.length !== 6) {
-      toast.error('Veuillez entrer le code à 6 chiffres.');
-      return;
-    }
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.verifyOtp({
-        email,
-        token: otpCode,
-        type: 'signup',
-      });
-      if (error) throw error;
-      toast.success('✓ Compte vérifié ! Connexion en cours...');
-    } catch (err: any) {
-      console.error('OTP error:', err);
-      toast.error(err.message || 'Code invalide. Veuillez réessayer.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResendOtp = async () => {
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email,
-      });
-      if (error) throw error;
-      toast.success('Un nouveau code a été envoyé à votre e-mail.');
-    } catch (err: any) {
-      toast.error(err.message || 'Impossible de renvoyer le code.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (step === 'otp') {
+  // Screen: email confirmed successfully
+  if (step === 'confirmed') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-primary/5 rounded-full blur-3xl" />
         </div>
-        <div className="relative w-full max-w-sm">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-4">
-              <span className="text-3xl">✉️</span>
-            </div>
-            <h1 className="font-serif text-2xl font-bold text-foreground">Vérification</h1>
-            <p className="text-sm text-muted-foreground mt-2">
-              Entrez le code à 6 chiffres envoyé à
-            </p>
-            <p className="text-sm font-medium text-primary">{email}</p>
+        <div className="relative w-full max-w-sm text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-green-100 dark:bg-green-900/30 mb-4">
+            <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-400" />
           </div>
+          <h1 className="font-serif text-2xl font-bold text-foreground mb-2">Compte confirmé !</h1>
+          <p className="text-sm text-muted-foreground mb-6">
+            Votre adresse e-mail a été vérifiée avec succès. Vous pouvez maintenant vous connecter.
+          </p>
+          <Button
+            className="w-full h-11"
+            onClick={() => { setStep('form'); setIsLogin(true); window.location.hash = ''; }}
+          >
+            Se connecter
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
+  // Screen: check your email after signup
+  if (step === 'check-email') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-primary/5 rounded-full blur-3xl" />
+        </div>
+        <div className="relative w-full max-w-sm text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-4">
+            <span className="text-3xl">✉️</span>
+          </div>
+          <h1 className="font-serif text-2xl font-bold text-foreground mb-2">Vérifiez votre e-mail</h1>
+          <p className="text-sm text-muted-foreground mb-1">
+            Un lien de confirmation a été envoyé à
+          </p>
+          <p className="text-sm font-medium text-primary mb-6">{email}</p>
           <Card className="border-border/50 shadow-lg">
-            <CardContent className="pt-6 space-y-6">
-              <div className="flex justify-center">
-                <InputOTP
-                  maxLength={6}
-                  value={otpCode}
-                  onChange={setOtpCode}
-                >
-                  <InputOTPGroup>
-                    <InputOTPSlot index={0} />
-                    <InputOTPSlot index={1} />
-                    <InputOTPSlot index={2} />
-                    <InputOTPSlot index={3} />
-                    <InputOTPSlot index={4} />
-                    <InputOTPSlot index={5} />
-                  </InputOTPGroup>
-                </InputOTP>
-              </div>
-
+            <CardContent className="pt-6 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Cliquez sur le lien dans l'e-mail pour activer votre compte, puis revenez ici pour vous connecter.
+              </p>
               <Button
-                onClick={handleVerifyOtp}
-                className="w-full h-11"
-                disabled={loading || otpCode.length !== 6}
+                variant="outline"
+                className="w-full"
+                onClick={() => { setStep('form'); setIsLogin(true); }}
               >
-                {loading ? (
-                  <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Vérification...</>
-                ) : 'Vérifier mon compte'}
+                Retour à la connexion
               </Button>
-
-              <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => { setStep('form'); setOtpCode(''); }}
-                  className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
-                >
-                  <ArrowLeft className="h-3 w-3" /> Retour
-                </button>
-                <button
-                  type="button"
-                  onClick={handleResendOtp}
-                  disabled={loading}
-                  className="text-sm text-primary hover:underline"
-                >
-                  Renvoyer le code
-                </button>
-              </div>
             </CardContent>
           </Card>
         </div>
@@ -166,6 +124,7 @@ export default function Auth() {
     );
   }
 
+  // Main login/signup form
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
