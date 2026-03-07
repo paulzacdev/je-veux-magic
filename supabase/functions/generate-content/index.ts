@@ -7,8 +7,14 @@ const corsHeaders = {
 };
 
 const ALLOWED_LANGUAGES = ['fr', 'ar', 'en', 'pt'];
+
+// Primary: Lovable AI Gateway
 const AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const AI_MODEL = "google/gemini-2.5-flash";
+
+// Fallback: OpenRouter (free models)
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
 
 // Retry wrapper with exponential backoff for rate limits
 async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
@@ -25,6 +31,52 @@ async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3)
     return response;
   }
   return await fetch(url, options);
+}
+
+// Call AI with automatic fallback to OpenRouter on 402/429
+async function callAI(body: any, lovableKey: string, openrouterKey: string | undefined): Promise<any> {
+  // Try Lovable AI Gateway first
+  const primaryResponse = await fetchWithRetry(AI_GATEWAY_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${lovableKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ model: AI_MODEL, ...body }),
+  });
+
+  if (primaryResponse.ok) {
+    return primaryResponse.json();
+  }
+
+  const status = primaryResponse.status;
+  const errText = await primaryResponse.text();
+  console.warn(`Lovable AI failed (${status}): ${errText.slice(0, 200)}`);
+
+  // Fallback to OpenRouter on 402 (no credits) or 429 (rate limit)
+  if ((status === 402 || status === 429) && openrouterKey) {
+    console.log("Falling back to OpenRouter free model...");
+    const fallbackResponse = await fetchWithRetry(OPENROUTER_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${openrouterKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://evangile-vecu.lovable.app",
+        "X-Title": "Evangile Vecu",
+      },
+      body: JSON.stringify({ model: OPENROUTER_MODEL, ...body }),
+    });
+
+    if (fallbackResponse.ok) {
+      return fallbackResponse.json();
+    }
+
+    const fallbackErr = await fallbackResponse.text();
+    console.error(`OpenRouter fallback also failed (${fallbackResponse.status}): ${fallbackErr.slice(0, 200)}`);
+    throw new Error(`AI unavailable (primary: ${status}, fallback: ${fallbackResponse.status})`);
+  }
+
+  throw new Error(`AI gateway error: ${status}`);
 }
 
 // Fetch Gospel from AELF API
