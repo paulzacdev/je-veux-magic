@@ -7,14 +7,16 @@ const corsHeaders = {
 };
 
 const ALLOWED_LANGUAGES = ['fr', 'ar', 'en', 'pt'];
+const AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const AI_MODEL = "google/gemini-2.5-flash";
 
 // Retry wrapper with exponential backoff for rate limits
 async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
-  const delays = [5000, 10000, 15000];
+  const delays = [3000, 6000, 12000];
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const response = await fetch(url, options);
     if (response.status === 429 && attempt < maxRetries) {
-      const delay = delays[attempt] || 15000;
+      const delay = delays[attempt] || 12000;
       console.log(`Rate limited (429). Retry ${attempt + 1}/${maxRetries} after ${delay / 1000}s...`);
       await response.text();
       await new Promise(r => setTimeout(r, delay));
@@ -39,7 +41,6 @@ async function fetchGospelFromAELF(sundayDate: string): Promise<{ reference: str
     
     const celebration = data.informations?.jour_liturgique_nom || data.informations?.ligne1 || "";
     
-    // Find the Gospel reading in lectures
     const messe = data.messes?.[0];
     if (!messe?.lectures) return null;
     
@@ -50,7 +51,6 @@ async function fetchGospelFromAELF(sundayDate: string): Promise<{ reference: str
     }
     
     const reference = evangile.ref || "";
-    // Strip HTML tags from contenu to get plain text
     const text = (evangile.contenu || "")
       .replace(/<br\s*\/?>/gi, "\n")
       .replace(/<[^>]+>/g, "")
@@ -107,12 +107,11 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Invalid weekStart format' }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // --- Use service role client for DB writes (after auth is confirmed) ---
-    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY not configured");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
@@ -145,6 +144,11 @@ Your responses are always theologically sound, pastoral, accessible to the faith
 CRITICAL LANGUAGE RULE: ${langInstructions[language] || langInstructions.fr}
 The output language is: ${langName.toUpperCase()}.
 Every single field you return in the tool call MUST be written in ${langName}. No exceptions.`;
+
+    const aiHeaders = {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    };
 
     let userPrompt: string;
     if (aelfGospel) {
@@ -181,17 +185,11 @@ ALL content MUST be written in ${langName.toUpperCase()}.
 Use the tool "generate_spiritual_content" to provide all fields.`;
     }
 
-    const openRouterUrl = "https://openrouter.ai/api/v1/chat/completions";
-    const openRouterHeaders = {
-      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-      "Content-Type": "application/json",
-    };
-
-    const response = await fetchWithRetry(openRouterUrl, {
+    const response = await fetchWithRetry(AI_GATEWAY_URL, {
       method: "POST",
-      headers: openRouterHeaders,
+      headers: aiHeaders,
       body: JSON.stringify({
-        model: "openai/gpt-oss-120b:free",
+        model: AI_MODEL,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -201,16 +199,16 @@ Use the tool "generate_spiritual_content" to provide all fields.`;
             type: "function",
             function: {
               name: "generate_spiritual_content",
-              description: "Génère le contenu spirituel complet de la semaine",
+              description: `Generate complete weekly spiritual content. ALL fields in ${langName}.`,
               parameters: {
                 type: "object",
                 properties: {
-                  gospel_reference: { type: "string", description: "Référence de l'Évangile ex: Matthieu 5, 1-12" },
-                  gospel_text: { type: "string", description: "Texte complet de l'Évangile" },
-                  commentary: { type: "string", description: "Commentaire théologique de 400-600 mots inspiré des Pères de l'Église" },
-                  meditation: { type: "string", description: "Méditation spirituelle de 300-400 mots" },
-                  virtues: { type: "array", items: { type: "string" }, description: "3 vertus chrétiennes à pratiquer cette semaine" },
-                  christian_advice: { type: "array", items: { type: "string" }, description: "5 conseils pratiques pour vivre l'Évangile" },
+                  gospel_reference: { type: "string", description: "Biblical reference e.g. Jn 4, 5-42" },
+                  gospel_text: { type: "string", description: `Full Gospel text in ${langName}` },
+                  commentary: { type: "string", description: `Theological commentary 400-600 words in ${langName}` },
+                  meditation: { type: "string", description: `Spiritual meditation 300-400 words in ${langName}` },
+                  virtues: { type: "array", items: { type: "string" }, description: `3 Christian virtues in ${langName}` },
+                  christian_advice: { type: "array", items: { type: "string" }, description: `5 practical tips in ${langName}` },
                 },
                 required: ["gospel_reference", "gospel_text", "commentary", "meditation", "virtues", "christian_advice"],
                 additionalProperties: false,
@@ -228,8 +226,13 @@ Use the tool "generate_spiritual_content" to provide all fields.`;
       const errText = await response.text();
       console.error("AI error:", response.status, errText);
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Le modèle est temporairement surchargé. Veuillez réessayer dans quelques minutes." }), {
+        return new Response(JSON.stringify({ error: "Le service IA est temporairement surchargé. Veuillez réessayer dans quelques minutes." }), {
           status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ error: "Crédits IA insuffisants. Veuillez réessayer plus tard." }), {
+          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       throw new Error(`AI gateway error: ${response.status}`);
@@ -254,7 +257,6 @@ Use the tool "generate_spiritual_content" to provide all fields.`;
     // Force the AELF reference and text if available
     if (aelfGospel) {
       parsed.gospel_reference = aelfGospel.reference;
-      // For French, use the official AELF text directly
       if (language === 'fr') {
         parsed.gospel_text = aelfGospel.text;
       }
@@ -285,6 +287,7 @@ Use the tool "generate_spiritual_content" to provide all fields.`;
       fr: ['Vendredi', 'Samedi', 'Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi'],
       en: ['Friday', 'Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'],
       ar: ['الجمعة', 'السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'],
+      pt: ['Sexta-feira', 'Sábado', 'Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira'],
     };
 
     const prayerLangInstruction: Record<string, string> = {
@@ -294,11 +297,11 @@ Use the tool "generate_spiritual_content" to provide all fields.`;
       pt: "Escreva TODAS as orações inteiramente em português. Cada título e texto deve estar em português.",
     };
 
-    const prayerResponse = await fetchWithRetry(openRouterUrl, {
+    const prayerResponse = await fetchWithRetry(AI_GATEWAY_URL, {
       method: "POST",
-      headers: openRouterHeaders,
+      headers: aiHeaders,
       body: JSON.stringify({
-        model: "openai/gpt-oss-120b:free",
+        model: AI_MODEL,
         messages: [
           { role: "system", content: systemPrompt },
           {
@@ -371,10 +374,13 @@ You MUST return exactly 7 prayers using the tool "generate_daily_prayers". Each 
             }));
             await supabase.from("daily_prayers").delete().eq("weekly_content_id", savedContent.id);
             await supabase.from("daily_prayers").insert(prayerInserts);
+            console.log(`Inserted ${prayerInserts.length} prayers for ${language}`);
           }
         } catch (e) {
           console.error("Prayer parse error:", e);
         }
+      } else {
+        console.error("No prayer tool call in response");
       }
     }
 
