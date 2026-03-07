@@ -198,10 +198,7 @@ CRITICAL LANGUAGE RULE: ${langInstructions[language] || langInstructions.fr}
 The output language is: ${langName.toUpperCase()}.
 Every single field you return in the tool call MUST be written in ${langName}. No exceptions.`;
 
-    const aiHeaders = {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    };
+    // aiHeaders no longer needed - callAI handles auth
 
     let userPrompt: string;
     if (aelfGospel) {
