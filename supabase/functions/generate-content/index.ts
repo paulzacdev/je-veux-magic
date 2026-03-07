@@ -129,42 +129,56 @@ serve(async (req) => {
     };
     const langName = langNames[language] || "français";
 
-    const systemPrompt = `Tu es un théologien catholique érudit, pasteur et pédagogue, 
-inspiré par les Pères de l'Église (Origène, Saint Augustin, Saint Jean Chrysostome), 
-Saint Thomas d'Aquin, et la tradition spirituelle catholique.
-Tu rédiges des contenus spirituels catholiques pour l'application "Évangile Vécu" du Diocèse Pierre Claverie.
-Tes réponses sont toujours théologiquement fiables, pastorales, accessibles aux fidèles, et profondément enracinées dans la Tradition catholique.
-Tu réponds UNIQUEMENT en ${langName}.`;
+    const langInstructions: Record<string, string> = {
+      fr: "Tu rédiges TOUT en français.",
+      en: "You MUST write ALL content entirely in English. Every field — gospel_text, commentary, meditation, virtues, christian_advice — MUST be in English. Do NOT leave any French text.",
+      ar: "يجب أن تكتب كل المحتوى بالكامل باللغة العربية. كل حقل — gospel_text, commentary, meditation, virtues, christian_advice — يجب أن يكون باللغة العربية. لا تترك أي نص بالفرنسية.",
+      pt: "Você DEVE escrever TODO o conteúdo inteiramente em português. Cada campo — gospel_text, commentary, meditation, virtues, christian_advice — DEVE estar em português. NÃO deixe nenhum texto em francês.",
+    };
+
+    const systemPrompt = `You are a scholarly Catholic theologian, pastor, and educator,
+inspired by the Church Fathers (Origen, Saint Augustine, Saint John Chrysostom),
+Saint Thomas Aquinas, and the Catholic spiritual tradition.
+You create spiritual content for the app "Évangile Vécu" of the Diocese Pierre Claverie.
+Your responses are always theologically sound, pastoral, accessible to the faithful, and deeply rooted in Catholic Tradition.
+
+CRITICAL LANGUAGE RULE: ${langInstructions[language] || langInstructions.fr}
+The output language is: ${langName.toUpperCase()}.
+Every single field you return in the tool call MUST be written in ${langName}. No exceptions.`;
 
     let userPrompt: string;
     if (aelfGospel) {
-      // We have the exact Gospel from AELF - use it directly
-      userPrompt = `Génère le contenu spirituel complet pour la semaine liturgique commençant le vendredi ${weekStart}.
-Le dimanche de cette semaine est le ${sundayDate} — ${aelfGospel.celebration}.
+      userPrompt = `Generate the complete spiritual content for the liturgical week starting Friday ${weekStart}.
+The Sunday of this week is ${sundayDate} — ${aelfGospel.celebration}.
 
-L'Évangile de ce dimanche est : **${aelfGospel.reference}**.
-C'est une donnée officielle tirée directement de l'API du lectionnaire AELF. Tu dois utiliser EXACTEMENT cette référence.
+The Gospel for this Sunday is: **${aelfGospel.reference}**.
+This is official data from the AELF lectionary API. You MUST use EXACTLY this reference.
 
-Voici le texte intégral de l'Évangile tel que fourni par le lectionnaire officiel :
+Here is the full Gospel text from the official lectionary:
 ---
 ${aelfGospel.text}
 ---
 
-Tu dois utiliser CE TEXTE EXACT comme base. Ne le modifie pas, ne le remplace pas.
-Génère le contenu spirituel correspondant (commentaire, méditation, vertus, conseils).
+MANDATORY INSTRUCTIONS:
+1. Use the tool "generate_spiritual_content" to return all fields.
+2. OUTPUT LANGUAGE = ${langName.toUpperCase()}. ALL fields must be in ${langName}.
+3. gospel_text: ${language === 'fr' ? 'Use the exact French text above without modification.' : `Translate the Gospel text above into ${langName}. The translation must be faithful, liturgical in tone, and complete.`}
+4. gospel_reference: Keep the biblical reference in international format (e.g., "Mt 5, 1-12").
+5. commentary: Write a rich theological commentary (400-600 words) in ${langName}, inspired by the Church Fathers.
+6. meditation: Write a deep spiritual meditation (300-400 words) in ${langName}.
+7. virtues: List 3 Christian virtues to practice this week, each as a short phrase in ${langName}.
+8. christian_advice: List 5 practical tips for living the Gospel this week, each in ${langName}.
 
-${language !== 'fr' ? `IMPORTANT: Traduis le texte de l'Évangile et tout le contenu en ${langName}. La référence biblique reste en format international.` : ''}
-
-Utilise l'outil generate_spiritual_content pour fournir toutes les informations.`;
+DO NOT leave any field in French if the target language is not French.`;
     } else {
-      // Fallback if AELF API fails
       console.warn("AELF API failed, falling back to AI-generated reference");
-      userPrompt = `Génère le contenu spirituel complet pour la semaine liturgique commençant le vendredi ${weekStart}.
-Le dimanche de cette semaine est le ${sundayDate}.
+      userPrompt = `Generate the complete spiritual content for the liturgical week starting Friday ${weekStart}.
+The Sunday of this week is ${sundayDate}.
 
-Identifie précisément l'Évangile du dimanche ${sundayDate} selon le lectionnaire catholique romain officiel.
+Identify the exact Gospel for Sunday ${sundayDate} according to the official Roman Catholic lectionary.
 
-Utilise l'outil generate_spiritual_content pour fournir toutes les informations.`;
+ALL content MUST be written in ${langName.toUpperCase()}.
+Use the tool "generate_spiritual_content" to provide all fields.`;
     }
 
     const openRouterUrl = "https://openrouter.ai/api/v1/chat/completions";
