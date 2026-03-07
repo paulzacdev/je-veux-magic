@@ -129,42 +129,56 @@ serve(async (req) => {
     };
     const langName = langNames[language] || "français";
 
-    const systemPrompt = `Tu es un théologien catholique érudit, pasteur et pédagogue, 
-inspiré par les Pères de l'Église (Origène, Saint Augustin, Saint Jean Chrysostome), 
-Saint Thomas d'Aquin, et la tradition spirituelle catholique.
-Tu rédiges des contenus spirituels catholiques pour l'application "Évangile Vécu" du Diocèse Pierre Claverie.
-Tes réponses sont toujours théologiquement fiables, pastorales, accessibles aux fidèles, et profondément enracinées dans la Tradition catholique.
-Tu réponds UNIQUEMENT en ${langName}.`;
+    const langInstructions: Record<string, string> = {
+      fr: "Tu rédiges TOUT en français.",
+      en: "You MUST write ALL content entirely in English. Every field — gospel_text, commentary, meditation, virtues, christian_advice — MUST be in English. Do NOT leave any French text.",
+      ar: "يجب أن تكتب كل المحتوى بالكامل باللغة العربية. كل حقل — gospel_text, commentary, meditation, virtues, christian_advice — يجب أن يكون باللغة العربية. لا تترك أي نص بالفرنسية.",
+      pt: "Você DEVE escrever TODO o conteúdo inteiramente em português. Cada campo — gospel_text, commentary, meditation, virtues, christian_advice — DEVE estar em português. NÃO deixe nenhum texto em francês.",
+    };
+
+    const systemPrompt = `You are a scholarly Catholic theologian, pastor, and educator,
+inspired by the Church Fathers (Origen, Saint Augustine, Saint John Chrysostom),
+Saint Thomas Aquinas, and the Catholic spiritual tradition.
+You create spiritual content for the app "Évangile Vécu" of the Diocese Pierre Claverie.
+Your responses are always theologically sound, pastoral, accessible to the faithful, and deeply rooted in Catholic Tradition.
+
+CRITICAL LANGUAGE RULE: ${langInstructions[language] || langInstructions.fr}
+The output language is: ${langName.toUpperCase()}.
+Every single field you return in the tool call MUST be written in ${langName}. No exceptions.`;
 
     let userPrompt: string;
     if (aelfGospel) {
-      // We have the exact Gospel from AELF - use it directly
-      userPrompt = `Génère le contenu spirituel complet pour la semaine liturgique commençant le vendredi ${weekStart}.
-Le dimanche de cette semaine est le ${sundayDate} — ${aelfGospel.celebration}.
+      userPrompt = `Generate the complete spiritual content for the liturgical week starting Friday ${weekStart}.
+The Sunday of this week is ${sundayDate} — ${aelfGospel.celebration}.
 
-L'Évangile de ce dimanche est : **${aelfGospel.reference}**.
-C'est une donnée officielle tirée directement de l'API du lectionnaire AELF. Tu dois utiliser EXACTEMENT cette référence.
+The Gospel for this Sunday is: **${aelfGospel.reference}**.
+This is official data from the AELF lectionary API. You MUST use EXACTLY this reference.
 
-Voici le texte intégral de l'Évangile tel que fourni par le lectionnaire officiel :
+Here is the full Gospel text from the official lectionary:
 ---
 ${aelfGospel.text}
 ---
 
-Tu dois utiliser CE TEXTE EXACT comme base. Ne le modifie pas, ne le remplace pas.
-Génère le contenu spirituel correspondant (commentaire, méditation, vertus, conseils).
+MANDATORY INSTRUCTIONS:
+1. Use the tool "generate_spiritual_content" to return all fields.
+2. OUTPUT LANGUAGE = ${langName.toUpperCase()}. ALL fields must be in ${langName}.
+3. gospel_text: ${language === 'fr' ? 'Use the exact French text above without modification.' : `Translate the Gospel text above into ${langName}. The translation must be faithful, liturgical in tone, and complete.`}
+4. gospel_reference: Keep the biblical reference in international format (e.g., "Mt 5, 1-12").
+5. commentary: Write a rich theological commentary (400-600 words) in ${langName}, inspired by the Church Fathers.
+6. meditation: Write a deep spiritual meditation (300-400 words) in ${langName}.
+7. virtues: List 3 Christian virtues to practice this week, each as a short phrase in ${langName}.
+8. christian_advice: List 5 practical tips for living the Gospel this week, each in ${langName}.
 
-${language !== 'fr' ? `IMPORTANT: Traduis le texte de l'Évangile et tout le contenu en ${langName}. La référence biblique reste en format international.` : ''}
-
-Utilise l'outil generate_spiritual_content pour fournir toutes les informations.`;
+DO NOT leave any field in French if the target language is not French.`;
     } else {
-      // Fallback if AELF API fails
       console.warn("AELF API failed, falling back to AI-generated reference");
-      userPrompt = `Génère le contenu spirituel complet pour la semaine liturgique commençant le vendredi ${weekStart}.
-Le dimanche de cette semaine est le ${sundayDate}.
+      userPrompt = `Generate the complete spiritual content for the liturgical week starting Friday ${weekStart}.
+The Sunday of this week is ${sundayDate}.
 
-Identifie précisément l'Évangile du dimanche ${sundayDate} selon le lectionnaire catholique romain officiel.
+Identify the exact Gospel for Sunday ${sundayDate} according to the official Roman Catholic lectionary.
 
-Utilise l'outil generate_spiritual_content pour fournir toutes les informations.`;
+ALL content MUST be written in ${langName.toUpperCase()}.
+Use the tool "generate_spiritual_content" to provide all fields.`;
     }
 
     const openRouterUrl = "https://openrouter.ai/api/v1/chat/completions";
@@ -273,6 +287,13 @@ Utilise l'outil generate_spiritual_content pour fournir toutes les informations.
       ar: ['الجمعة', 'السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'],
     };
 
+    const prayerLangInstruction: Record<string, string> = {
+      fr: "Rédige toutes les prières en français.",
+      en: "Write ALL prayers entirely in English. Every title and text must be in English.",
+      ar: "اكتب جميع الصلوات بالكامل باللغة العربية. كل عنوان ونص يجب أن يكون بالعربية.",
+      pt: "Escreva TODAS as orações inteiramente em português. Cada título e texto deve estar em português.",
+    };
+
     const prayerResponse = await fetchWithRetry(openRouterUrl, {
       method: "POST",
       headers: openRouterHeaders,
@@ -282,7 +303,20 @@ Utilise l'outil generate_spiritual_content pour fournir toutes les informations.
           { role: "system", content: systemPrompt },
           {
             role: "user",
-            content: `Pour l'Évangile du dimanche "${parsed.gospel_reference}", génère 7 prières quotidiennes (une par jour, du vendredi au jeudi) inspirées de cet Évangile. Chaque prière doit être différente, belle, poétique, profonde (100-150 mots), ancrée dans la Tradition catholique. Les jours sont: ${(dayNames[language] || dayNames.fr).join(', ')}.`,
+            content: `For the Sunday Gospel "${parsed.gospel_reference}", generate 7 daily prayers (one per day, from Friday to Thursday) inspired by this Gospel.
+
+CRITICAL: ${prayerLangInstruction[language] || prayerLangInstruction.fr}
+Output language: ${langName.toUpperCase()}.
+
+Each prayer must be:
+- Different from the others
+- Beautiful, poetic, and profound (100-150 words)
+- Rooted in Catholic Tradition
+- Written ENTIRELY in ${langName}
+
+The days are: ${(dayNames[language] || dayNames.fr).join(', ')}.
+
+You MUST return exactly 7 prayers using the tool "generate_daily_prayers". Each prayer must have day (0=Friday through 6=Thursday), title, and text — ALL in ${langName}.`,
           },
         ],
         tools: [
@@ -290,7 +324,7 @@ Utilise l'outil generate_spiritual_content pour fournir toutes les informations.
             type: "function",
             function: {
               name: "generate_daily_prayers",
-              description: "Génère les prières quotidiennes de la semaine",
+              description: `Generate 7 daily prayers for the week, ALL in ${langName}`,
               parameters: {
                 type: "object",
                 properties: {
@@ -299,13 +333,15 @@ Utilise l'outil generate_spiritual_content pour fournir toutes les informations.
                     items: {
                       type: "object",
                       properties: {
-                        day: { type: "number", description: "0=Vendredi, 1=Samedi, 2=Dimanche, 3=Lundi, 4=Mardi, 5=Mercredi, 6=Jeudi" },
-                        title: { type: "string" },
-                        text: { type: "string" },
+                        day: { type: "number", description: "0=Friday, 1=Saturday, 2=Sunday, 3=Monday, 4=Tuesday, 5=Wednesday, 6=Thursday" },
+                        title: { type: "string", description: `Prayer title in ${langName}` },
+                        text: { type: "string", description: `Prayer text in ${langName}, 100-150 words` },
                       },
                       required: ["day", "title", "text"],
                       additionalProperties: false,
                     },
+                    minItems: 7,
+                    maxItems: 7,
                   },
                 },
                 required: ["prayers"],
@@ -316,7 +352,7 @@ Utilise l'outil generate_spiritual_content pour fournir toutes les informations.
         ],
         tool_choice: { type: "function", function: { name: "generate_daily_prayers" } },
         temperature: 0.7,
-        max_tokens: 4000,
+        max_tokens: 5000,
       }),
     });
 
