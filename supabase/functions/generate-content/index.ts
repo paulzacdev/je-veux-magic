@@ -7,8 +7,14 @@ const corsHeaders = {
 };
 
 const ALLOWED_LANGUAGES = ['fr', 'ar', 'en', 'pt'];
+
+// Primary: Lovable AI Gateway
 const AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const AI_MODEL = "google/gemini-2.5-flash";
+
+// Fallback: OpenRouter (free models)
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
 
 // Retry wrapper with exponential backoff for rate limits
 async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
@@ -25,6 +31,52 @@ async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3)
     return response;
   }
   return await fetch(url, options);
+}
+
+// Call AI with automatic fallback to OpenRouter on 402/429
+async function callAI(body: any, lovableKey: string, openrouterKey: string | undefined): Promise<any> {
+  // Try Lovable AI Gateway first
+  const primaryResponse = await fetchWithRetry(AI_GATEWAY_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${lovableKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ model: AI_MODEL, ...body }),
+  });
+
+  if (primaryResponse.ok) {
+    return primaryResponse.json();
+  }
+
+  const status = primaryResponse.status;
+  const errText = await primaryResponse.text();
+  console.warn(`Lovable AI failed (${status}): ${errText.slice(0, 200)}`);
+
+  // Fallback to OpenRouter on 402 (no credits) or 429 (rate limit)
+  if ((status === 402 || status === 429) && openrouterKey) {
+    console.log("Falling back to OpenRouter free model...");
+    const fallbackResponse = await fetchWithRetry(OPENROUTER_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${openrouterKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://evangile-vecu.lovable.app",
+        "X-Title": "Evangile Vecu",
+      },
+      body: JSON.stringify({ model: OPENROUTER_MODEL, ...body }),
+    });
+
+    if (fallbackResponse.ok) {
+      return fallbackResponse.json();
+    }
+
+    const fallbackErr = await fallbackResponse.text();
+    console.error(`OpenRouter fallback also failed (${fallbackResponse.status}): ${fallbackErr.slice(0, 200)}`);
+    throw new Error(`AI unavailable (primary: ${status}, fallback: ${fallbackResponse.status})`);
+  }
+
+  throw new Error(`AI gateway error: ${status}`);
 }
 
 // Fetch Gospel from AELF API
@@ -108,10 +160,11 @@ serve(async (req) => {
     }
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    if (!LOVABLE_API_KEY && !OPENROUTER_API_KEY) throw new Error("No AI API key configured");
 
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
@@ -145,10 +198,7 @@ CRITICAL LANGUAGE RULE: ${langInstructions[language] || langInstructions.fr}
 The output language is: ${langName.toUpperCase()}.
 Every single field you return in the tool call MUST be written in ${langName}. No exceptions.`;
 
-    const aiHeaders = {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    };
+    // aiHeaders no longer needed - callAI handles auth
 
     let userPrompt: string;
     if (aelfGospel) {
@@ -185,60 +235,38 @@ ALL content MUST be written in ${langName.toUpperCase()}.
 Use the tool "generate_spiritual_content" to provide all fields.`;
     }
 
-    const response = await fetchWithRetry(AI_GATEWAY_URL, {
-      method: "POST",
-      headers: aiHeaders,
-      body: JSON.stringify({
-        model: AI_MODEL,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "generate_spiritual_content",
-              description: `Generate complete weekly spiritual content. ALL fields in ${langName}.`,
-              parameters: {
-                type: "object",
-                properties: {
-                  gospel_reference: { type: "string", description: "Biblical reference e.g. Jn 4, 5-42" },
-                  gospel_text: { type: "string", description: `Full Gospel text in ${langName}` },
-                  commentary: { type: "string", description: `Theological commentary 400-600 words in ${langName}` },
-                  meditation: { type: "string", description: `Spiritual meditation 300-400 words in ${langName}` },
-                  virtues: { type: "array", items: { type: "string" }, description: `3 Christian virtues in ${langName}` },
-                  christian_advice: { type: "array", items: { type: "string" }, description: `5 practical tips in ${langName}` },
-                },
-                required: ["gospel_reference", "gospel_text", "commentary", "meditation", "virtues", "christian_advice"],
-                additionalProperties: false,
+    const aiData = await callAI({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "generate_spiritual_content",
+            description: `Generate complete weekly spiritual content. ALL fields in ${langName}.`,
+            parameters: {
+              type: "object",
+              properties: {
+                gospel_reference: { type: "string", description: "Biblical reference e.g. Jn 4, 5-42" },
+                gospel_text: { type: "string", description: `Full Gospel text in ${langName}` },
+                commentary: { type: "string", description: `Theological commentary 400-600 words in ${langName}` },
+                meditation: { type: "string", description: `Spiritual meditation 300-400 words in ${langName}` },
+                virtues: { type: "array", items: { type: "string" }, description: `3 Christian virtues in ${langName}` },
+                christian_advice: { type: "array", items: { type: "string" }, description: `5 practical tips in ${langName}` },
               },
+              required: ["gospel_reference", "gospel_text", "commentary", "meditation", "virtues", "christian_advice"],
+              additionalProperties: false,
             },
           },
-        ],
-        tool_choice: { type: "function", function: { name: "generate_spiritual_content" } },
-        temperature: 0.7,
-        max_tokens: 8000,
-      }),
-    });
+        },
+      ],
+      tool_choice: { type: "function", function: { name: "generate_spiritual_content" } },
+      temperature: 0.7,
+      max_tokens: 8000,
+    }, LOVABLE_API_KEY!, OPENROUTER_API_KEY);
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("AI error:", response.status, errText);
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Le service IA est temporairement surchargé. Veuillez réessayer dans quelques minutes." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Crédits IA insuffisants. Veuillez réessayer plus tard." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      throw new Error(`AI gateway error: ${response.status}`);
-    }
-
-    const aiData = await response.json();
     const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
 
     if (!toolCall) {
@@ -297,11 +325,8 @@ Use the tool "generate_spiritual_content" to provide all fields.`;
       pt: "Escreva TODAS as orações inteiramente em português. Cada título e texto deve estar em português.",
     };
 
-    const prayerResponse = await fetchWithRetry(AI_GATEWAY_URL, {
-      method: "POST",
-      headers: aiHeaders,
-      body: JSON.stringify({
-        model: AI_MODEL,
+    try {
+      const prayerAiData = await callAI({
         messages: [
           { role: "system", content: systemPrompt },
           {
@@ -356,14 +381,11 @@ You MUST return exactly 7 prayers using the tool "generate_daily_prayers". Each 
         tool_choice: { type: "function", function: { name: "generate_daily_prayers" } },
         temperature: 0.7,
         max_tokens: 5000,
-      }),
-    });
+      }, LOVABLE_API_KEY!, OPENROUTER_API_KEY);
 
-    if (prayerResponse.ok && savedContent?.id) {
-      const prayerAiData = await prayerResponse.json();
-      const prayerToolCall = prayerAiData.choices?.[0]?.message?.tool_calls?.[0];
-      if (prayerToolCall) {
-        try {
+      if (savedContent?.id) {
+        const prayerToolCall = prayerAiData.choices?.[0]?.message?.tool_calls?.[0];
+        if (prayerToolCall) {
           const prayerParsed = JSON.parse(prayerToolCall.function.arguments);
           if (prayerParsed.prayers) {
             const prayerInserts = prayerParsed.prayers.map((p: any) => ({
@@ -376,12 +398,13 @@ You MUST return exactly 7 prayers using the tool "generate_daily_prayers". Each 
             await supabase.from("daily_prayers").insert(prayerInserts);
             console.log(`Inserted ${prayerInserts.length} prayers for ${language}`);
           }
-        } catch (e) {
-          console.error("Prayer parse error:", e);
+        } else {
+          console.error("No prayer tool call in response");
         }
-      } else {
-        console.error("No prayer tool call in response");
       }
+    } catch (e) {
+      console.error("Prayer generation error:", e);
+    }
     }
 
     return new Response(JSON.stringify({ content: savedContent }), {
