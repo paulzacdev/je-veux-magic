@@ -325,11 +325,8 @@ Use the tool "generate_spiritual_content" to provide all fields.`;
       pt: "Escreva TODAS as orações inteiramente em português. Cada título e texto deve estar em português.",
     };
 
-    const prayerResponse = await fetchWithRetry(AI_GATEWAY_URL, {
-      method: "POST",
-      headers: aiHeaders,
-      body: JSON.stringify({
-        model: AI_MODEL,
+    try {
+      const prayerAiData = await callAI({
         messages: [
           { role: "system", content: systemPrompt },
           {
@@ -384,14 +381,11 @@ You MUST return exactly 7 prayers using the tool "generate_daily_prayers". Each 
         tool_choice: { type: "function", function: { name: "generate_daily_prayers" } },
         temperature: 0.7,
         max_tokens: 5000,
-      }),
-    });
+      }, LOVABLE_API_KEY!, OPENROUTER_API_KEY);
 
-    if (prayerResponse.ok && savedContent?.id) {
-      const prayerAiData = await prayerResponse.json();
-      const prayerToolCall = prayerAiData.choices?.[0]?.message?.tool_calls?.[0];
-      if (prayerToolCall) {
-        try {
+      if (savedContent?.id) {
+        const prayerToolCall = prayerAiData.choices?.[0]?.message?.tool_calls?.[0];
+        if (prayerToolCall) {
           const prayerParsed = JSON.parse(prayerToolCall.function.arguments);
           if (prayerParsed.prayers) {
             const prayerInserts = prayerParsed.prayers.map((p: any) => ({
@@ -404,12 +398,13 @@ You MUST return exactly 7 prayers using the tool "generate_daily_prayers". Each 
             await supabase.from("daily_prayers").insert(prayerInserts);
             console.log(`Inserted ${prayerInserts.length} prayers for ${language}`);
           }
-        } catch (e) {
-          console.error("Prayer parse error:", e);
+        } else {
+          console.error("No prayer tool call in response");
         }
-      } else {
-        console.error("No prayer tool call in response");
       }
+    } catch (e) {
+      console.error("Prayer generation error:", e);
+    }
     }
 
     return new Response(JSON.stringify({ content: savedContent }), {
