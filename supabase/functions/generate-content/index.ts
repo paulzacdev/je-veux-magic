@@ -235,60 +235,38 @@ ALL content MUST be written in ${langName.toUpperCase()}.
 Use the tool "generate_spiritual_content" to provide all fields.`;
     }
 
-    const response = await fetchWithRetry(AI_GATEWAY_URL, {
-      method: "POST",
-      headers: aiHeaders,
-      body: JSON.stringify({
-        model: AI_MODEL,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "generate_spiritual_content",
-              description: `Generate complete weekly spiritual content. ALL fields in ${langName}.`,
-              parameters: {
-                type: "object",
-                properties: {
-                  gospel_reference: { type: "string", description: "Biblical reference e.g. Jn 4, 5-42" },
-                  gospel_text: { type: "string", description: `Full Gospel text in ${langName}` },
-                  commentary: { type: "string", description: `Theological commentary 400-600 words in ${langName}` },
-                  meditation: { type: "string", description: `Spiritual meditation 300-400 words in ${langName}` },
-                  virtues: { type: "array", items: { type: "string" }, description: `3 Christian virtues in ${langName}` },
-                  christian_advice: { type: "array", items: { type: "string" }, description: `5 practical tips in ${langName}` },
-                },
-                required: ["gospel_reference", "gospel_text", "commentary", "meditation", "virtues", "christian_advice"],
-                additionalProperties: false,
+    const aiData = await callAI({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "generate_spiritual_content",
+            description: `Generate complete weekly spiritual content. ALL fields in ${langName}.`,
+            parameters: {
+              type: "object",
+              properties: {
+                gospel_reference: { type: "string", description: "Biblical reference e.g. Jn 4, 5-42" },
+                gospel_text: { type: "string", description: `Full Gospel text in ${langName}` },
+                commentary: { type: "string", description: `Theological commentary 400-600 words in ${langName}` },
+                meditation: { type: "string", description: `Spiritual meditation 300-400 words in ${langName}` },
+                virtues: { type: "array", items: { type: "string" }, description: `3 Christian virtues in ${langName}` },
+                christian_advice: { type: "array", items: { type: "string" }, description: `5 practical tips in ${langName}` },
               },
+              required: ["gospel_reference", "gospel_text", "commentary", "meditation", "virtues", "christian_advice"],
+              additionalProperties: false,
             },
           },
-        ],
-        tool_choice: { type: "function", function: { name: "generate_spiritual_content" } },
-        temperature: 0.7,
-        max_tokens: 8000,
-      }),
-    });
+        },
+      ],
+      tool_choice: { type: "function", function: { name: "generate_spiritual_content" } },
+      temperature: 0.7,
+      max_tokens: 8000,
+    }, LOVABLE_API_KEY!, OPENROUTER_API_KEY);
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("AI error:", response.status, errText);
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Le service IA est temporairement surchargé. Veuillez réessayer dans quelques minutes." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Crédits IA insuffisants. Veuillez réessayer plus tard." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      throw new Error(`AI gateway error: ${response.status}`);
-    }
-
-    const aiData = await response.json();
     const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
 
     if (!toolCall) {
