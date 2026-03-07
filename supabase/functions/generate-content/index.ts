@@ -287,6 +287,13 @@ Use the tool "generate_spiritual_content" to provide all fields.`;
       ar: ['الجمعة', 'السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'],
     };
 
+    const prayerLangInstruction: Record<string, string> = {
+      fr: "Rédige toutes les prières en français.",
+      en: "Write ALL prayers entirely in English. Every title and text must be in English.",
+      ar: "اكتب جميع الصلوات بالكامل باللغة العربية. كل عنوان ونص يجب أن يكون بالعربية.",
+      pt: "Escreva TODAS as orações inteiramente em português. Cada título e texto deve estar em português.",
+    };
+
     const prayerResponse = await fetchWithRetry(openRouterUrl, {
       method: "POST",
       headers: openRouterHeaders,
@@ -296,7 +303,20 @@ Use the tool "generate_spiritual_content" to provide all fields.`;
           { role: "system", content: systemPrompt },
           {
             role: "user",
-            content: `Pour l'Évangile du dimanche "${parsed.gospel_reference}", génère 7 prières quotidiennes (une par jour, du vendredi au jeudi) inspirées de cet Évangile. Chaque prière doit être différente, belle, poétique, profonde (100-150 mots), ancrée dans la Tradition catholique. Les jours sont: ${(dayNames[language] || dayNames.fr).join(', ')}.`,
+            content: `For the Sunday Gospel "${parsed.gospel_reference}", generate 7 daily prayers (one per day, from Friday to Thursday) inspired by this Gospel.
+
+CRITICAL: ${prayerLangInstruction[language] || prayerLangInstruction.fr}
+Output language: ${langName.toUpperCase()}.
+
+Each prayer must be:
+- Different from the others
+- Beautiful, poetic, and profound (100-150 words)
+- Rooted in Catholic Tradition
+- Written ENTIRELY in ${langName}
+
+The days are: ${(dayNames[language] || dayNames.fr).join(', ')}.
+
+You MUST return exactly 7 prayers using the tool "generate_daily_prayers". Each prayer must have day (0=Friday through 6=Thursday), title, and text — ALL in ${langName}.`,
           },
         ],
         tools: [
@@ -304,7 +324,7 @@ Use the tool "generate_spiritual_content" to provide all fields.`;
             type: "function",
             function: {
               name: "generate_daily_prayers",
-              description: "Génère les prières quotidiennes de la semaine",
+              description: `Generate 7 daily prayers for the week, ALL in ${langName}`,
               parameters: {
                 type: "object",
                 properties: {
@@ -313,13 +333,15 @@ Use the tool "generate_spiritual_content" to provide all fields.`;
                     items: {
                       type: "object",
                       properties: {
-                        day: { type: "number", description: "0=Vendredi, 1=Samedi, 2=Dimanche, 3=Lundi, 4=Mardi, 5=Mercredi, 6=Jeudi" },
-                        title: { type: "string" },
-                        text: { type: "string" },
+                        day: { type: "number", description: "0=Friday, 1=Saturday, 2=Sunday, 3=Monday, 4=Tuesday, 5=Wednesday, 6=Thursday" },
+                        title: { type: "string", description: `Prayer title in ${langName}` },
+                        text: { type: "string", description: `Prayer text in ${langName}, 100-150 words` },
                       },
                       required: ["day", "title", "text"],
                       additionalProperties: false,
                     },
+                    minItems: 7,
+                    maxItems: 7,
                   },
                 },
                 required: ["prayers"],
@@ -330,7 +352,7 @@ Use the tool "generate_spiritual_content" to provide all fields.`;
         ],
         tool_choice: { type: "function", function: { name: "generate_daily_prayers" } },
         temperature: 0.7,
-        max_tokens: 4000,
+        max_tokens: 5000,
       }),
     });
 
